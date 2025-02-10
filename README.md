@@ -68,6 +68,7 @@ The **System Automation using LLM Models** project aims to streamline and automa
 # Clone the repository
 git clone https://github.com/your-repo/system-automation-llm.git
 cd system-automation-llm
+sudo apt-get install libgtkmm-3.0-dev libsqlite3-dev
 cd Src/GUI
 make all
 ```
