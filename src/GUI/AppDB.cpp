@@ -137,6 +137,13 @@ class AppDB{
             return queryResult;
         }
 
+        void clearPresets(){
+            sql = "DELETE FROM presets;";
+            if(sqlite3_exec(dbPointer, sql, nullptr, nullptr, &error) != SQLITE_OK){
+                cout << error << endl;
+                throw 2;
+            }
+        }
 };
 
 /*

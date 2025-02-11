@@ -57,37 +57,54 @@ class MyApp : public Gtk::Window {
         Gtk::FileChooserButton m_file_chooser; // FileChooserButton widget
         */
 
-       void tab4OnAdd(){
+        void tab4OnAdd(){
             string nameEntry = name.get_text();
             string commandEntry = command.get_text();
-            if(nameEntry.size() > 0 && commandEntry.size() > 0)
-                myDb.updatePresets(nameEntry, commandEntry);
-            
+            if(nameEntry.size() > 0 && commandEntry.size() > 0){
+                try{
+                    myDb.updatePresets(nameEntry, commandEntry);
+                    Gtk::Box* currPresetRow = Gtk::manage(new Gtk::Box);
+                    currPresetRow -> set_orientation(Gtk::ORIENTATION_HORIZONTAL);
+                    currPresetRow -> set_spacing(10);
 
-            Gtk::Box* currPresetRow = Gtk::manage(new Gtk::Box);
-            currPresetRow -> set_orientation(Gtk::ORIENTATION_HORIZONTAL);
-            currPresetRow -> set_spacing(10);
+                    Gtk::Label* currID = Gtk::manage(new Gtk::Label);
+                    currID -> set_text(to_string(presetID));
+                    Gtk::Label* currName = Gtk::manage(new Gtk::Label);
+                    currName->set_text(nameEntry);
+                    Gtk::Label* currCommand = Gtk::manage(new Gtk::Label);
+                    currCommand -> set_text(commandEntry);
 
-            Gtk::Label* currID = Gtk::manage(new Gtk::Label);
-            currID -> set_text(to_string(presetID));
-            Gtk::Label* currName = Gtk::manage(new Gtk::Label);
-            currName->set_text(nameEntry);
-            Gtk::Label* currCommand = Gtk::manage(new Gtk::Label);
-            currCommand -> set_text(commandEntry);
+                    currPresetRow -> pack_start(*currID);
+                    currPresetRow -> pack_start(*currName);
+                    currPresetRow -> pack_start(*currCommand);
 
-            currPresetRow -> pack_start(*currID);
-            currPresetRow -> pack_start(*currName);
-            currPresetRow -> pack_start(*currCommand);
+                    tab4Box2.pack_start(*currPresetRow);
+                    presetID += 1;
 
-            tab4Box2.pack_start(*currPresetRow);
-            presetID += 1;
-
-            name.set_text("");
-            command.set_text("");
-            show_all_children();
-            return;
+                    name.set_text("");
+                    command.set_text("");
+                    show_all_children();
+                    return;
+                }
+                catch(...){
+                    cout << "the preset name shoudl be unique" << endl;
+                    Gtk::MessageDialog dialog(*this, "Alert", false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
+                    dialog.set_secondary_text("Preset names should be unique!");
+                    dialog.run();
+                }
+            }
        }
 
+        void tab3OnClear1(){
+            myDb.clearPresets();
+            Gtk::Widget* box = &tab4Box2;
+            tab4Container.remove(tab4Box2);
+            tab4Box2 = Gtk::Box();
+            tab4Box2.set_orientation(Gtk::ORIENTATION_VERTICAL);
+            tab4Box2.set_spacing(10);
+            tab4Container.pack_start(tab4Box2);
+            show_all_children();
+        }
     public:
         MyApp() {
             //creating database
@@ -127,6 +144,7 @@ class MyApp : public Gtk::Window {
             sensitivitySlider.set_range(0, 1);
             sensitivitySlider.set_value(myDb.fetchSettingsSens());
             clearHistory.set_label("Clear History");
+            clearPresets.signal_clicked().connect(sigc::mem_fun(*this, &MyApp::tab3OnClear1));
             clearPresets.set_label("Clear Presets");
 
             tab3Container.pack_start(apiKeyText);
@@ -241,21 +259,6 @@ class MyApp : public Gtk::Window {
             m_box.pack_start(m_file_chooser);
             */
         }
-
-    protected:
-        /*
-        // Callback for button click
-        void on_button_clicked() {
-            std::string text = m_entry.get_text();
-            m_label.set_text("You entered: " + text);
-        }
-
-        // Callback for slider value change
-        void on_slider_changed() {
-            int value = static_cast<int>(m_slider.get_value());
-            m_label.set_text("Slider value: " + std::to_string(value));
-        }
-        */
 
 };
 
