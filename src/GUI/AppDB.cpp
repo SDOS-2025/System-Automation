@@ -75,6 +75,7 @@ class AppDB{
                     return std::string(apiKey);
                 }
             }  
+            return "";
         }
         
         float fetchSettingsSens(){

@@ -1,5 +1,0 @@
-all: 
-	g++ -o MyApp MyApp.cpp `pkg-config --cflags --libs gtkmm-3.0` -lsqlite3
-
-clean:
-	rm -f MyApp

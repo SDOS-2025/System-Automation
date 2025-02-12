@@ -11,7 +11,7 @@ class MyApp : public Gtk::Window {
 
         Gtk::Notebook notebook;
 
-        Gtk::Box tab1Container;
+        Gtk::FlowBox tab1Container;
         Gtk::Button mic;        // Button widget
         Gtk::Label micDefaultText;
 
