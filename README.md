@@ -63,13 +63,3 @@ The **System Automation using LLM Models** project aims to streamline and automa
 - Step-by-step implementation guides and tutorials will be available in the `docs/` directory.
 - Future improvements will include integrating more complex AI-driven automation features.
 
-## Installation
-```sh
-# Clone the repository
-git clone https://github.com/your-repo/system-automation-llm.git
-cd system-automation-llm
-sudo apt-get install libgtkmm-3.0-dev libsqlite3-dev
-cd Src/GUI
-make all
-```
-
