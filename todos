@@ -1,0 +1,7 @@
+- recording uses threads 
+- Integrate History
+- Improve the design
+- Include generated gif
+- Encrypt Database
+- handle exceptions from db and myApp.cpp
+- Make class diagram and ER generate
