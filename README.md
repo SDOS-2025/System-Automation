@@ -62,4 +62,7 @@ The **System Automation using LLM Models** project aims to streamline and automa
 - Each feature will be detailed with specific use cases in the documentation.
 - Step-by-step implementation guides and tutorials will be available in the `docs/` directory.
 - Future improvements will include integrating more complex AI-driven automation features.
+<<<<<<< HEAD
 
+=======
+>>>>>>> 3db8011 (initial)
