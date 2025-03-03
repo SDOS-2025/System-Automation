@@ -1,6 +1,7 @@
 #include <gtkmm.h>
 #include <bits/stdc++.h>
 #include "AppDB.cpp"
+#include "BUWrapper.cpp"
 #include "STT.cpp"
 using namespace std;
 
@@ -10,6 +11,7 @@ using namespace std;
 class MyApp : public Gtk::Window {
     private:
         AppDB myDb;
+        BUWrapper browserUse;
         STT stt;
         int presetID; //this will be updated from database
 
@@ -58,9 +60,10 @@ class MyApp : public Gtk::Window {
         void tab4OnSave(){
             string apiKey = apiEntry.get_text();
             float sensVal = static_cast<float>(sensSlider.get_value());
-            if (apiKey.size() > 0)
+            if (apiKey.size() > 0){
                 myDb.updateSettings(apiKey, sensVal);
-            else
+                browserUse.setAPI(apiKey);
+            }else
                 myDb.updateSettings(sensVal);
         }
         
@@ -168,6 +171,8 @@ class MyApp : public Gtk::Window {
                 row -> set_child(*rowFlow);
                 historyVector.push_back(row);
                 historyList.append(*row);
+
+                browserUse.execute(transcription);
             }
         }
 
@@ -178,9 +183,9 @@ class MyApp : public Gtk::Window {
             }          
             historyVector.clear();
         }
-        
+
     public:
-        MyApp() : micOn(false) {
+        MyApp() : micOn(false), myDb(), browserUse() {
                 auto settings = Gtk::Settings::get_default();
                 settings->set_property("gtk-application-prefer-dark-theme", true);
                 set_title("System Automation");
@@ -250,7 +255,7 @@ class MyApp : public Gtk::Window {
                     historyVector.push_back(row);
                     historyList.append(*row);
                 } 
-                historyList.set_selection_mode(Gtk::SelectionMode::NONE);
+                tab2Container.set_selection_mode(Gtk::SelectionMode::NONE);
                 historyWindow.set_child(historyList);
                 tab2Container.append(historyWindow);
                 notebook.append_page(tab2Container, "History");
@@ -278,7 +283,6 @@ class MyApp : public Gtk::Window {
 
                 //fetching db 
                 presetsWindow.set_size_request(-1, 400);
-                presetsList.set_selection_mode(Gtk::SelectionMode::NONE);
                 vector<vector<string>> fetchPresetsResults = myDb.fetchPresets();
                 presetID = fetchPresetsResults.size();
                 for(int i = 0; i < fetchPresetsResults.size(); i++){
@@ -308,6 +312,7 @@ class MyApp : public Gtk::Window {
                     presetsVector.push_back(row);
                     presetsList.append(*row);
                 } 
+                presetsList.set_selection_mode(Gtk::SelectionMode::NONE);
                 presetsWindow.set_child(presetsList);
                 tab3Container.append(presetsWindow);
                 notebook.append_page(tab3Container, "Presets");
@@ -318,6 +323,7 @@ class MyApp : public Gtk::Window {
                 apiLabel.set_text("OpenAI API Key:");
                 apiLabel.set_size_request(200, -1);
                 apiEntry.set_placeholder_text(myDb.fetchSettingsAPI());
+                browserUse.setAPI(myDb.fetchSettingsAPI()); //setting the env variable
                 apiEntry.set_size_request(600, -1);
                 tab4Box1.append(apiLabel);
                 tab4Box1.append(apiEntry);
@@ -355,6 +361,7 @@ class MyApp : public Gtk::Window {
                 //--------------------------------
                 applyCSS();
                 set_child(notebook);
+
         }
 
     };
