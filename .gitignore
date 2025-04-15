@@ -29,6 +29,7 @@ venv/
 *.elf
 *.exe
 *.out
+
 *.app
 *.i*86
 *.x86_64
@@ -36,6 +37,12 @@ venv/
 
 # IDEs and editors
 .idea/
+src/GUI/MyApp
+
+# SQLite database
+*.db
+
+# IDE specific files
 .vscode/
 *.swp
 *.swo
