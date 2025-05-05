@@ -5,9 +5,10 @@ import time
 import json
 import base64
 from io import BytesIO
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Union
 import os
 import datetime
+import re
 
 from PIL import Image # Import Image
 
@@ -53,6 +54,9 @@ class TaskProcessor:
         # Ensure debug directory exists
         os.makedirs(DEBUG_IMAGE_DIR, exist_ok=True)
         logger.info(f"Debug screenshot directory ensured at: {os.path.abspath(DEBUG_IMAGE_DIR)}")
+
+        # Store icon ID coordinate mapping
+        self.known_icon_coordinates = {}
 
     def _get_current_screen_analysis(self, screen_region: Optional[Tuple[int, int, int, int]] = None) -> Tuple[Dict[str, Any], str]:
         """Captures screen, performs analysis, returns results + base64 image, and saves debug image."""
@@ -124,6 +128,9 @@ class TaskProcessor:
         self.should_stop = False
 
         try:
+            # Store the explicit Icon IDs mentioned in the request before getting a new screen analysis
+            self._extract_and_store_icon_ids(user_requirement)
+            
             analysis_result, base64_image = self._get_current_screen_analysis()
             # Add user request to history *before* planning call
             self.message_history.append({"role": "user", "content": user_requirement})
@@ -449,6 +456,301 @@ class TaskProcessor:
         """Signals the execution loop to stop."""
         self.should_stop = True
         logger.info("Stop signal received for TaskProcessor.")
+
+    def _extract_and_store_icon_ids(self, user_text):
+        """Extract explicit icon IDs from user text and store them for future use"""
+        # Match patterns like "press ID 45" or "click ID 23"
+        id_patterns = [
+            r"press ID (\d+)",
+            r"click ID (\d+)",
+            r"press icon (\d+)",
+            r"click icon (\d+)",
+            r"click on ID (\d+)",
+            r"click on icon (\d+)"
+        ]
+        
+        for pattern in id_patterns:
+            matches = re.finditer(pattern, user_text, re.IGNORECASE)
+            for match in matches:
+                icon_id = int(match.group(1))
+                logger.info(f"Found explicit icon ID reference: {icon_id}")
+                
+                # Store the icon ID to be mapped to coordinates after screen analysis
+                self.known_icon_coordinates[icon_id] = None
+                
+        # If we found IDs in the text, perform a one-time screen analysis to map them to coordinates
+        if self.known_icon_coordinates:
+            logger.info(f"Mapping {len(self.known_icon_coordinates)} explicit icon IDs to coordinates")
+            analysis_result, _ = self._get_current_screen_analysis()
+            
+            for icon_id in list(self.known_icon_coordinates.keys()):
+                # Find element by ID in the current screen
+                element_dict = next((elem for elem in analysis_result.get("elements", []) 
+                                   if elem.get("element_id") == icon_id), None)
+                
+                if element_dict and 'coordinates' in element_dict and len(element_dict['coordinates']) == 4:
+                    bbox = element_dict['coordinates']
+                    center_x = int((bbox[0] + bbox[2]) / 2)
+                    center_y = int((bbox[1] + bbox[3]) / 2)
+                    self.known_icon_coordinates[icon_id] = (center_x, center_y)
+                    logger.info(f"Mapped icon ID {icon_id} to coordinates {self.known_icon_coordinates[icon_id]}")
+                else:
+                    logger.warning(f"Could not find icon ID {icon_id} in current screen")
+                    # Keep the None value for this ID
+
+    def process_next_step(self, current_task):
+        """Process the next step for the given task."""
+        # Get fresh screen analysis
+        try:
+            current_analysis_result, base64_image = self._get_current_screen_analysis()
+            
+            # Get the next action from the LLM
+            try:
+                action_queue = self.llm_interaction.get_next_action(
+                    current_task,
+                    current_analysis_result,
+                    base64_image,
+                    self.message_history
+                )
+                
+                # Extracted action queue for current task
+                if not action_queue or len(action_queue) == 0:
+                    logger.warning(f"Empty action queue for task: {current_task}. Skipping task.")
+                    self.message_history.append({"role": "system", "content": f"Task skipped - LLM provided no actions for: {current_task}"})
+                    return False, True # Failed, needs removal
+                    
+                if len(action_queue) >= 20:
+                    # Too many actions in one step is suspicious, likely parsing error or confusion
+                    logger.warning(f"LLM returned too many actions ({len(action_queue)}) for a single task step. Truncating queue to first 5 actions.")
+                    action_queue = action_queue[:5] # Limit to first 5
+                    self.message_history.append({"role": "system", "content": f"Note: {len(action_queue)} actions were requested in a single step, truncated to 5."})
+                    
+                queue_processed_successfully = True
+                force_change_task = False
+                
+                # Log the planned action queue for this step
+                logger.info(f"Processing action queue ({len(action_queue)} actions)")
+                
+                # Add info about LLM's chosen actions to the message history (formatted/summarized for reference)
+                # ---------------------------------------------------------------------- #
+                tool_call_summary = [f"For task '{current_task}', planned actions:"]
+                
+                for action_enum_summary, args_dict_summary, reasoning_summary in action_queue:
+                    # Check if this is a click action with a box_id that matches our stored explicit IDs
+                    if action_enum_summary in [Action.LEFT_CLICK, Action.RIGHT_CLICK, Action.DOUBLE_CLICK] and args_dict_summary:
+                        box_id = args_dict_summary.get("box_id")
+                        if box_id is not None and box_id in self.known_icon_coordinates and self.known_icon_coordinates[box_id] is not None:
+                            # Replace with explicit coordinates if we have them stored
+                            coords = self.known_icon_coordinates[box_id]
+                            logger.info(f"Using stored coordinates {coords} for explicit icon ID {box_id}")
+                            # Set box_id to -1 to indicate we're using explicit coordinates
+                            args_dict_summary["box_id"] = -1
+                            args_dict_summary["coordinates"] = list(coords)
+                    
+                    # Optionally format args for brevity/clarity in history
+                    formatted_args = json.dumps(args_dict_summary or {})
+                    tool_call_summary.append(
+                        f"Tool: {action_enum_summary.value}, Args: {formatted_args}, Reasoning: {reasoning_summary or 'N/A'}"
+                    )
+                assistant_turn_content = "\n".join(tool_call_summary)
+                self.message_history.append({"role": "assistant", "content": assistant_turn_content})
+                # ---------------------------------------------------------------------- #
+                
+                for action_enum, args_dict, reasoning in action_queue:
+                    
+                    # Check if this is a click action with a box_id that matches our stored explicit IDs
+                    if action_enum in [Action.LEFT_CLICK, Action.RIGHT_CLICK, Action.DOUBLE_CLICK] and args_dict:
+                        box_id = args_dict.get("box_id")
+                        if box_id is not None and box_id in self.known_icon_coordinates and self.known_icon_coordinates[box_id] is not None:
+                            # Replace with explicit coordinates if we have them stored
+                            coords = self.known_icon_coordinates[box_id]
+                            logger.info(f"Using stored coordinates {coords} for explicit icon ID {box_id}")
+                            # Set box_id to -1 to indicate we're using explicit coordinates
+                            args_dict["box_id"] = -1
+                            args_dict["coordinates"] = list(coords)
+                    
+                    # Log the reasoning for this specific action from the sequence
+                    if reasoning:
+                         logger.info(f"LLM Reasoning (Action: '{action_enum.value}'): {reasoning}")
+                    # else: # Optional: Log if reasoning is missing
+                    #    logger.info(f"LLM provided no specific reasoning for action '{action_enum.value}'.")
+                    
+                    # Log LLM Action Decision from the queue
+                    log_action_details = [f"Action: {action_enum.value}"]
+                    args_dict = args_dict or {} # Ensure args_dict is a dict
+                    if "box_id" in args_dict:
+                         log_action_details.append(f"Box ID: {args_dict.get('box_id')}")
+                    if args_dict.get("coordinates"):
+                         log_action_details.append(f"Coords: {args_dict['coordinates']}")
+                    if "value" in args_dict:
+                         log_action_details.append(f"Value: '{args_dict.get('value')}'")
+                    if "keys" in args_dict:
+                         log_action_details.append(f"Keys: '{args_dict.get('keys')}'")
+                    logger.info(f"LLM Chosen Action: {' | '.join(log_action_details)}")
+                    
+                    # === Special Action Handlers === #
+                    
+                    # Handle Done/Task Complete (explicit stops)
+                    if action_enum == Action.DONE:
+                        logger.info(f"LLM indicated task is DONE. Stopping all task execution.")
+                        self.message_history.append({"role": "system", "content": f"Action 'done' requested by LLM. All tasks completed."}) 
+                        self.task_list = [] # Clear all tasks
+                        return True, False # Successful (current task), no need to remove as all tasks are cleared
+                    
+                    # Handle Task Complete (move to next task)
+                    if action_enum == Action.TASK_COMPLETE:
+                        logger.info(f"Task '{current_task}' marked as complete by LLM.")
+                        self.message_history.append({"role": "system", "content": f"Task '{current_task}' marked complete."}) 
+                        return True, True # Successful (current task), should remove from list
+                    
+                    # Handle Re-analyze Screen (perform another screen capture, don't remove task)
+                    if action_enum == Action.REANALYZE:
+                        logger.info(f"LLM requested re-analysis of the screen.")
+                        self.message_history.append({"role": "system", "content": f"Action 'reanalyze' requested by LLM. Taking new screenshot."}) 
+                        return False, False # Unsuccessful (need another iteration), don't remove from task list
+                    
+                    # Handle CHANGE_TASK (skip execution, stop queue, set flag to remove task)
+                    if action_enum == Action.CHANGE_TASK:
+                        logger.warning(f"LLM requested CHANGE_TASK for task '{current_task}'. Reason: {reasoning or 'None provided'}. Stopping queue and skipping task.")
+                        self.message_history.append({"role": "system", "content": f"Action 'change_task' requested by LLM. Skipping task: {current_task}. Reason: {reasoning}"}) 
+                        force_change_task = True
+                        break # Exit the inner loop (queue processing)
+    
+                    # --- Prepare and Execute Normal Actions --- #
+                    action_name = action_enum.value
+                    exec_args = {}
+                    # args_dict already ensured to be a dict
+                    box_id = args_dict.get("box_id")
+                    explicit_coords = args_dict.get("coordinates")
+                    coords_to_use = None
+    
+                    # Coordinate Logic 
+                    if action_enum in [Action.LEFT_CLICK, Action.RIGHT_CLICK, Action.DOUBLE_CLICK, Action.HOVER, Action.DRAG_TO]:
+                        if box_id is not None and box_id != -1:
+                            # Check if we have a stored coordinate for this box_id
+                            if box_id in self.known_icon_coordinates and self.known_icon_coordinates[box_id] is not None:
+                                coords_to_use = self.known_icon_coordinates[box_id]
+                                logger.debug(f"Using stored coordinates {coords_to_use} for element ID {box_id}")
+                            else:
+                                # Find element coordinates based on box_id
+                                element_dict = next((elem for elem in current_analysis_result.get("elements", []) if elem.get("element_id") == box_id), None)
+                                # Calculate center from coordinates if element found
+                                if element_dict and 'coordinates' in element_dict and len(element_dict['coordinates']) == 4:
+                                    bbox = element_dict['coordinates']
+                                    center_x = int((bbox[0] + bbox[2]) / 2)
+                                    center_y = int((bbox[1] + bbox[3]) / 2)
+                                    coords_to_use = (center_x, center_y)
+                                    logger.debug(f"Using calculated center coords {coords_to_use} for element ID {box_id}")
+                                else:
+                                    logger.warning(f"Element ID {box_id} not found or missing valid coordinates in analysis result for action '{action_name}'. Skipping execution of this action.")
+                                    self.message_history.append({"role": "system", "content": f"Action '{action_name}' skipped: Element ID {box_id} not found or invalid."}) 
+                                    queue_processed_successfully = False
+                                    break # Stop processing this queue
+                        elif explicit_coords and len(explicit_coords) == 2:
+                            coords_to_use = tuple(explicit_coords)
+                            logger.debug(f"Using explicit coordinates {coords_to_use} for action '{action_name}'.")
+                        else:
+                            # Neither box_id nor valid coordinates provided for a mouse action
+                            logger.warning(f"Action '{action_name}' requires valid 'box_id' or 'coordinates'. Skipping execution of this action.")
+                            self.message_history.append({"role": "system", "content": f"Action '{action_name}' skipped due to missing/invalid 'box_id' or 'coordinates'."}) 
+                            queue_processed_successfully = False
+                            break # Stop processing this queue
+                        
+                        # Assign coordinates for relevant actions
+                        if action_enum in [Action.LEFT_CLICK, Action.RIGHT_CLICK, Action.DOUBLE_CLICK, Action.HOVER]:
+                             exec_args['coords'] = coords_to_use
+                        elif action_enum == Action.DRAG_TO:
+                             exec_args['target_coords'] = coords_to_use # Assumes drag *from* current mouse pos
+
+                    # Argument preparation for other actions (same as before)
+                    elif action_enum == Action.TYPE:
+                        text_value = args_dict.get("value")
+                        if text_value is not None:
+                            exec_args['text'] = text_value
+                        else:
+                            logger.warning(f"Action '{action_name}' requires 'value' argument. Skipping execution.")
+                            self.message_history.append({"role": "system", "content": f"Action '{action_name}' skipped due to missing 'value' argument."}) 
+                            queue_processed_successfully = False
+                            break # Stop processing this queue
+                    elif action_enum == Action.KEY:
+                        keys_value = args_dict.get("keys")
+                        if keys_value is not None:
+                            exec_args['keys'] = keys_value
+                        else:
+                            logger.warning(f"Action '{action_name}' requires 'keys' argument. Skipping execution.")
+                            self.message_history.append({"role": "system", "content": f"Action '{action_name}' skipped due to missing 'keys' argument."}) 
+                            queue_processed_successfully = False
+                            break # Stop processing this queue  
+                    elif action_enum == Action.SCROLL:
+                        direction = args_dict.get("direction")
+                        if direction in ["up", "down"]:
+                            exec_args['direction'] = direction
+                        else:
+                            logger.warning(f"Action '{action_name}' requires valid 'direction' argument (up/down). Got: {direction}. Skipping execution.")
+                            self.message_history.append({"role": "system", "content": f"Action '{action_name}' skipped due to invalid 'direction' argument: {direction}"}) 
+                            queue_processed_successfully = False
+                            break # Stop processing this queue
+                    elif action_enum == Action.WAIT:
+                        duration = args_dict.get("duration_secs", 1.0) # Default to 1 sec
+                        try:
+                            # Convert to float, limit range 
+                            duration_float = float(duration)
+                            if duration_float < 0.1:
+                                duration_float = 0.1
+                            elif duration_float > 5.0: # Cap long waits
+                                duration_float = 5.0
+                                logger.warning(f"Capping wait duration from {duration} to 5.0 seconds")
+                            exec_args['duration_secs'] = duration_float
+                        except (ValueError, TypeError):
+                            # Default if conversion fails
+                            logger.warning(f"Invalid wait duration '{duration}', using default 1.0 second")
+                            exec_args['duration_secs'] = 1.0
+
+                    # Execute the action - handling special cases
+                    if action_enum in [Action.WAIT, Action.REANALYZE, Action.TASK_COMPLETE, Action.DONE, Action.CHANGE_TASK]:
+                        # These are handled above or will be skipped in execute
+                        continue
+                    
+                    try:
+                        # Execute the action
+                        logger.debug(f"Executing action: {action_name} with args: {exec_args}")
+                        result = self.action_executor.execute(action_name, **exec_args)
+                        logger.info(f"Executed {action_name} successfully: {result.output}")
+                        # Add system message about action success
+                        self.message_history.append({"role": "system", "content": f"Action '{action_name}' executed successfully."})
+                    except Exception as action_error:
+                        logger.error(f"Error executing action {action_name}: {action_error}", exc_info=True)
+                        self.message_history.append({"role": "system", "content": f"Error executing action '{action_name}': {action_error}"})
+                        # Continue to next action rather than failing entire queue?
+                        queue_processed_successfully = False
+                        # Consider continuing or breaking based on severity
+                        # if CRITICAL_ACTIONS.includes(action_enum) or str(action_error).contains("CRITICAL"):
+                        #     break # Stop queue on critical errors
+                        # else: 
+                        #     continue # Try next action for non-critical errors
+                
+                # Process result of action queue (processed outside the queue loop)
+                if force_change_task:
+                    # If change_task was requested, mark for removal
+                    return False, True # Failed, should remove from list
+                
+                # If we reached here without early returns, return overall queue success
+                if queue_processed_successfully:
+                    logger.info(f"Action queue for task '{current_task}' processed successfully. Ready for next step.")
+                    return True, False # Successful, don't remove yet
+                else:
+                    logger.warning(f"Action queue for task '{current_task}' had errors. Continuing task.")
+                    return False, False # Failed, but keep trying this task
+                    
+            except Exception as e:
+                logger.error(f"Error in action processing for task '{current_task}': {e}", exc_info=True)
+                self.message_history.append({"role": "system", "content": f"Error processing action for task '{current_task}': {e}"})
+                return False, False # Error, keep the task and retry
+                
+        except Exception as e:
+            logger.error(f"Error getting screen analysis: {e}", exc_info=True)
+            self.message_history.append({"role": "system", "content": f"Error getting screen analysis: {e}"})
+            return False, False # Error, keep the task and retry
 
 # Example Usage (Illustrative) - Remains commented out
 # if __name__ == '__main__':
