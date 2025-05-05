@@ -6,7 +6,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                            QLabel, QLineEdit, QPushButton, QTextEdit,
                            QMessageBox, QDialog, QSystemTrayIcon)
-from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QSize, QObject
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QSize, QObject, QThread
 from PyQt6.QtGui import QPixmap, QIcon, QTextCursor, QTextCharFormat, QColor
 
 # Remove external dependencies that don't exist
@@ -30,6 +30,7 @@ class MainWindow(QMainWindow):
     # Define signals for controller communication
     command_initiated = pyqtSignal(str)  # Signal emitted when user initiates a command
     settings_changed = pyqtSignal(dict)  # Signal emitted when settings are changed
+    mic_button_clicked = pyqtSignal()  # Signal emitted when mic button is clicked
     
     def __init__(self, args, orchestrator_control=None):
         super().__init__()
@@ -38,6 +39,7 @@ class MainWindow(QMainWindow):
         
         # Controller - Logic
         self.controller = MainWindowController(self.model, orchestrator_control)
+        self.controller._main_window = self  # Store reference to window in controller
         
         # Arguments from command line
         self.args = args
@@ -152,6 +154,19 @@ class MainWindow(QMainWindow):
         self.chat_input.returnPressed.connect(self.process_input)
         
         # Buttons
+        self.mic_button = QPushButton()
+        
+        # Try to get theme icon, fallback to text if not available
+        mic_icon = QIcon.fromTheme("audio-input-microphone")
+        if mic_icon.isNull():
+            self.mic_button.setText("🎤")  # Microphone emoji as fallback
+        else:
+            self.mic_button.setIcon(mic_icon)
+            
+        self.mic_button.setToolTip("Record voice input")
+        self.mic_button.setFixedSize(QSize(40, 40))
+        self.mic_button.clicked.connect(self.record_voice_input)
+        
         self.submit_button = QPushButton("Send")
         self.stop_button = QPushButton("Stop")
         
@@ -159,6 +174,7 @@ class MainWindow(QMainWindow):
         self.stop_button.clicked.connect(self.controller.stop_process)
         
         input_layout.addWidget(self.chat_input, 8)
+        input_layout.addWidget(self.mic_button, 1)
         input_layout.addWidget(self.submit_button, 1)
         input_layout.addWidget(self.stop_button, 1)
         
@@ -192,6 +208,7 @@ class MainWindow(QMainWindow):
         # Connect our signals to controller
         self.command_initiated.connect(self.controller.process_command)
         self.settings_changed.connect(self.controller.update_settings)
+        self.mic_button_clicked.connect(self.controller.start_voice_recognition)
         
         # Connect model change notifications
         self.model.messages_changed.connect(self.update_chat_display)
@@ -205,15 +222,23 @@ class MainWindow(QMainWindow):
         # Clear input box
         self.chat_input.clear()
         
+        # Disable input controls while processing
+        self.chat_input.setEnabled(False)
+        self.submit_button.setEnabled(False)
+        self.mic_button.setEnabled(False)
+        
         # Add to display
         self.controller.add_user_message(user_input)
         
         # Emit signal for processing
         self.command_initiated.emit(user_input)
         
-        # Minimize window after sending
-        self.showMinimized()
-    
+        # Re-enable controls
+        self.chat_input.setEnabled(True)
+        self.submit_button.setEnabled(True)
+        self.mic_button.setEnabled(True)
+        self.chat_input.setFocus()
+        
     def open_settings_dialog(self):
         """Open settings dialog"""
         dialog = SettingsDialog(self, self.model.state)
@@ -252,6 +277,35 @@ class MainWindow(QMainWindow):
                 event.ignore()
         else:
             event.accept()
+
+    def record_voice_input(self):
+        """Handle mic button click to record voice input"""
+        # Check if orchestrator and STT engine are available
+        if not self.controller.orchestrator or not self.controller.orchestrator.stt_engine:
+            self.controller.handle_log("Speech-to-Text engine not initialized. Please check your configuration.")
+            return
+            
+        self.mic_button.setEnabled(False)
+        self.mic_button.setToolTip("Recording...")
+        
+        # Visual indicator that recording is active
+        self.mic_button.setStyleSheet("background-color: #ff5252;")  # Red background while recording
+        
+        # Send signal to start recording
+        self.mic_button_clicked.emit()
+        
+    def set_transcribed_text(self, text, auto_submit=False):
+        """Set transcribed text to the input field"""
+        if text:
+            self.chat_input.setText(text)
+            self.chat_input.setFocus()
+            if auto_submit:
+                self.process_input()
+                
+        # Reset button state
+        self.mic_button.setEnabled(True)
+        self.mic_button.setStyleSheet("")  # Remove recording style
+        self.mic_button.setToolTip("Record voice input")
 
 
 class MainWindowModel(QObject):
@@ -317,6 +371,7 @@ class MainWindowController:
         self.model = model
         self.orchestrator = orchestrator
         self.worker = None
+        self._main_window = None  # Will store reference to main window
         
     def process_command(self, command):
         """Process a command from the user"""
@@ -417,4 +472,58 @@ class MainWindowController:
         
         # Scroll to bottom
         text_edit.setTextCursor(cursor)
-        text_edit.ensureCursorVisible() 
+        text_edit.ensureCursorVisible()
+    
+    def start_voice_recognition(self):
+        """Start voice recognition when mic button is clicked"""
+        if not self.orchestrator or not self.orchestrator.stt_engine:
+            self.model.add_message("System", "Speech-to-Text engine not initialized.")
+            if self._main_window:
+                self._main_window.mic_button.setEnabled(True)
+            return
+        
+        # Create a separate thread for audio recording to avoid UI freezing
+        class VoiceRecognitionWorker(QThread):
+            transcription_done = pyqtSignal(str)
+            
+            def __init__(self, stt_engine):
+                super().__init__()
+                self.stt_engine = stt_engine
+                
+            def run(self):
+                try:
+                    transcribed_text = self.stt_engine.listen_and_transcribe(record_duration=10.0)
+                    self.transcription_done.emit(transcribed_text or "")
+                except Exception as e:
+                    self.transcription_done.emit("")
+                    print(f"Voice recognition error: {e}")
+        
+        # Add status message
+        self.model.add_message("System", "Listening... (speak clearly, up to 10 seconds)")
+        
+        # Start worker thread
+        self.voice_worker = VoiceRecognitionWorker(self.orchestrator.stt_engine)
+        self.voice_worker.transcription_done.connect(
+            lambda text: self.handle_voice_transcription(text)
+        )
+        self.voice_worker.start()
+    
+    def handle_voice_transcription(self, text):
+        """Handle transcribed text from STT engine"""
+        if text:
+            self.model.add_message("System", f"Transcribed: {text}")
+            
+            # Set text to input field in main window
+            if self._main_window:
+                # Optional: Auto-submit the transcribed text
+                auto_submit = self.model.state.get("auto_submit_voice", False)
+                self._main_window.set_transcribed_text(text, auto_submit)
+                
+        else:
+            self.model.add_message("System", "Could not transcribe audio.")
+            
+        # Reset mic button in main window
+        if self._main_window:
+            if not text:  # Only reset if transcription failed (otherwise handled in set_transcribed_text)
+                self._main_window.mic_button.setEnabled(True)
+                self._main_window.mic_button.setToolTip("Record voice input") 

@@ -2,7 +2,7 @@
 Settings dialog for application configuration
 """
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, 
-                          QLabel, QLineEdit, QPushButton)
+                          QLabel, QLineEdit, QPushButton, QCheckBox)
 
 class SettingsDialog(QDialog):
     """Dialog for application settings"""
@@ -40,6 +40,12 @@ class SettingsDialog(QDialog):
         api_layout.addWidget(api_label)
         api_layout.addWidget(self.api_key_input)
         
+        # Voice input settings
+        voice_layout = QHBoxLayout()
+        self.auto_submit_checkbox = QCheckBox("Auto-submit voice transcription")
+        self.auto_submit_checkbox.setChecked(self.state.get("auto_submit_voice", False))
+        voice_layout.addWidget(self.auto_submit_checkbox)
+        
         # OK and Cancel buttons
         button_layout = QHBoxLayout()
         self.ok_button = QPushButton("OK")
@@ -56,6 +62,8 @@ class SettingsDialog(QDialog):
         layout.addLayout(url_layout)
         layout.addSpacing(15)
         layout.addLayout(api_layout)
+        layout.addSpacing(15)
+        layout.addLayout(voice_layout)
         layout.addSpacing(25)
         layout.addLayout(button_layout)
         layout.addSpacing(15)
@@ -65,5 +73,6 @@ class SettingsDialog(QDialog):
         return {
             "model": self.model_input.text(),
             "base_url": self.base_url_input.text(),
-            "api_key": self.api_key_input.text()
+            "api_key": self.api_key_input.text(),
+            "auto_submit_voice": self.auto_submit_checkbox.isChecked()
         } 
