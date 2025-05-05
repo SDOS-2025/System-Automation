@@ -421,7 +421,7 @@ TOOL EXECUTION NOTES:
 - Task Completion: `{Action.TASK_COMPLETE.value}` marks the current task step finished. Use as the final call in a sequence if applicable.
 - Overall Completion: `{Action.DONE.value}` marks the overall user goal met. Use as the final call in a sequence if applicable.
 - Change Task: `{Action.CHANGE_TASK.value}` skips the current problematic task.
-- **Keyboard First (CRITICAL PREFERENCE):** **YOU MUST STRONGLY prefer** using keyboard actions (`key` tool for shortcuts like 'ctrl+k', 'tab', 'enter', arrow keys, or the standard Super/Win+Type+Enter method for opening apps; **and the `type` tool for standard text input**) over mouse clicks (`left_click`). **Even if a clickable element is visible on the screen**, if a reliable keyboard shortcut, direct text entry (`type` tool), or the standard app opening procedure exists for the desired action, **USE THE KEYBOARD METHOD**. Remember to consider common shortcuts and the system's standard application launching method (using the `{system_info.get('super_key', {}).get('key_name', 'Super/Win')}` key) before resorting to mouse interactions. Mouse clicks based on `box_id` are less reliable and should be a fallback. Examples:
+- **Keyboard First (CRITICAL PREFERENCE):** **YOU MUST STRONGLY prefer** using keyboard actions (`key` tool for shortcuts like 'ctrl+k', 'tab', 'enter', arrow keys, or the standard Super/Win+Type+Enter method for opening apps) over mouse clicks (`left_click`). **Even if a clickable element is visible on the screen**, if a reliable keyboard shortcut or the standard app opening procedure exists for the desired action, **USE THE KEYBOARD METHOD**. Remember to consider common shortcuts and the system's standard application launching method (using the `{system_info.get('super_key', {}).get('key_name', 'Super/Win')}` key) before resorting to mouse interactions. Mouse clicks based on `box_id` are less reliable and should be a fallback. Examples:
   - **Instead of:** `left_click` on a search icon (box_id: 15).
   - **Prefer:** `key` with `keys: 'ctrl+k'` (if that's the app's search shortcut).
   - **Instead of:** `left_click` on an OK button (box_id: 45).
@@ -449,6 +449,14 @@ TOOL EXECUTION NOTES:
 4. >> System executes scroll, then re-analyzes screen in the next step <<
 
 REMEMBER: Actions are ONLY communicated via Tool Calls. Be decisive and combine actions where appropriate.
+
+- **Type Alphanumerics Directly:** Similarly, for standard alphanumeric input (letters a-z, numbers 0-9), **always prefer the `type` tool** over clicking on-screen buttons representing those characters (like on a calculator or keyboard layout).
+  - **Example (Calculator):**
+    - **Instead of:** `left_click` on button '1', `left_click` on button '+', `left_click` on button '2'.
+    - **Prefer:** `type` with `value: '1+2'` (assuming the calculator input field has focus).
+
+- **Leverage Known Shortcuts:** Beyond the specific examples, if you know a keyboard shortcut for an action within the current application (e.g., saving, opening menus, navigating), prefer using the `key` tool with that shortcut over mouse interaction.
+- **Avoid Exploratory Actions:** Do not perform unnecessary actions like hovering just to see tooltips or confirm element identity unless absolutely necessary and the task requires it. Trust the element IDs and context.
 """
 
     def _create_planning_system_prompt(self, system_info: dict) -> str:
