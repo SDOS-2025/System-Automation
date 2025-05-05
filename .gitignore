@@ -6,3 +6,23 @@ tmp**
 build**
 dist**
 commit.md
+
+# Cache and logs
+cache/
+logs/
+debug_screenshots/
+
+# Byte-compiled / optimized / DLL files
+*.pyc
+
+# Environment variables
+.env*
+
+# OS-generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehtumbs.db
+Thumbs.db
