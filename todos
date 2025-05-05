@@ -1,7 +1,0 @@
-- Improve the design
-- Include generated gif
-- Encrypt Database
-- handle exceptions from db and myApp.cpp
-- Make class diagram and ER generate
-- reduce dependencies, check a way to incorporate api key directly into program
-- Generate Include Files
