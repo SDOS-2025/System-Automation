@@ -1,55 +1,8 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
-.installed.cfg
-*.egg
-.env
-venv/
-.venv/
-
-# C
-*.o
-*.ko
-*.obj
-*.elf
-*.exe
-*.out
-
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# IDEs and editors
-.idea/
-src/GUI/MyApp
-
-# SQLite database
-*.db
-
-# IDE specific files
-.vscode/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
-
-# Logs and databases
-*.log
-*.sql
-*.sqlite
+**/__pycache__**
+weights**
+.conda**
+.venv
+tmp**
+build**
+dist**
+commit.md

@@ -1,0 +1,50 @@
+# General Settings
+logging:
+  level: INFO # DEBUG, INFO, WARNING, ERROR
+  log_file: "assistant.log"
+
+# OpenAI API Settings
+openai:
+  # IMPORTANT: Set your OpenAI API key as an environment variable named OPENAI_API_KEY
+  # Do not commit your actual key here.
+  api_key: "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" # Placeholder - loaded from env var by llm_interaction.py
+  model: "gpt-4.1-mini" # Or another suitable model like gpt-3.5-turbo
+  stt_model: "whisper-1"
+  tts_model: "tts-1"
+  tts_voice: "alloy" # alloy, echo, fable, onyx, nova, shimmer
+
+# Screen Analysis Settings
+screen_analysis:
+  # Path relative to project root (e.g., weights/yolov8s.pt)
+  # Path points to the expected location within the modelscope cache
+  yolo_model_path: "weights/modelscope_cache/AI-ModelScope/OmniParser-v2.0/icon_detect/model.pt"
+
+# Audio Settings
+audio:
+  # Adjust these indices based on your system's devices
+  # Use scripts/list_audio_devices.py (if it exists) or system tools to find indices
+  input_device_index: -1 # -1 often means default device
+  output_device_index: -1 # -1 often means default device
+  sample_rate: 16000
+  frames_per_buffer: 512
+
+# Wake Word Settings (Porcupine)
+wake_word:
+  enabled: false # Disabled for now
+  # Get your key from PicoVoice Console: https://console.picovoice.ai/
+  access_key: "YOUR_PICOVOICE_ACCESS_KEY" # Placeholder for your key
+  # Path to the .ppn model file for your chosen wake word(s)
+  # Download from PicoVoice Console or use default path if available
+  model_path: "" # e.g., weights/porcupine/Hey-Jarvis_en_linux_v2_2_0.ppn
+  # List of built-in keywords: https://picovoice.ai/docs/porcupine/resources/keyword-files/
+  # Or path(s) to custom .ppn file(s)
+  keyword_paths: ["porcupine"] # Example using built-in "porcupine" keyword
+  sensitivity: 0.5 # Value between 0.0 and 1.0
+
+# Text-to-Speech Engine Selection
+tts:
+  # engine: "openai" # Options: "openai", "system"
+  engine: "system" # Defaulting to system TTS for broader compatibility initially
+
+# TODO: Add specific LLM model selection under openai if needed
+# TODO: Add other necessary configurations as components are fleshed out
