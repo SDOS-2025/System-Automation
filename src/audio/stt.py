@@ -48,7 +48,7 @@ class OpenAiSttEngine:
         self.input_device_index = input_device_index
         self.pa = pyaudio.PyAudio()
 
-    def _record_audio(self, duration: float = 5.0, silence_threshold: float = 0.5, sample_rate: int = 16000, chunk_size: int = 1024) -> Optional[io.BytesIO]:
+    def _record_audio(self, duration: float = 5.0, silence_threshold: float = 0.5, sample_rate: int = 16000, chunk_size: int = 1024, stop_flag=None) -> Optional[io.BytesIO]:
         """
         Records audio from the microphone until silence or max duration is reached.
 
@@ -57,6 +57,7 @@ class OpenAiSttEngine:
             silence_threshold: Duration of silence in seconds to stop recording.
             sample_rate: Audio sample rate.
             chunk_size: Audio buffer size.
+            stop_flag: Optional callback function that returns True when recording should stop.
 
         Returns:
             BytesIO object containing the recorded WAV audio, or None if recording fails.
@@ -88,6 +89,11 @@ class OpenAiSttEngine:
             except IOError as e:
                 logger.warning(f"Audio recording read error: {e}")
                 # Consider attempting recovery or just stopping
+                break
+
+            # Check for stop flag
+            if stop_flag and stop_flag():
+                logger.info("Recording stopped by user request.")
                 break
 
             # Basic silence detection (energy-based would be better)
@@ -168,9 +174,9 @@ class OpenAiSttEngine:
             logger.error(f"OpenAI Whisper API request failed: {e}", exc_info=True)
             raise SpeechToTextError(f"Whisper API error: {e}") from e
 
-    def listen_and_transcribe(self, record_duration: float = 5.0) -> Optional[str]:
+    def listen_and_transcribe(self, record_duration: float = 5.0, stop_flag=None) -> Optional[str]:
         """Records audio and then transcribes it."""
-        audio_buffer = self._record_audio(duration=record_duration)
+        audio_buffer = self._record_audio(duration=record_duration, stop_flag=stop_flag)
         if audio_buffer:
             # # Optional: Save recorded audio for debugging
             # with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:

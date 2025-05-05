@@ -30,7 +30,7 @@ class MainWindow(QMainWindow):
     # Define signals for controller communication
     command_initiated = pyqtSignal(str)  # Signal emitted when user initiates a command
     settings_changed = pyqtSignal(dict)  # Signal emitted when settings are changed
-    mic_button_clicked = pyqtSignal()  # Signal emitted when mic button is clicked
+    mic_button_clicked = pyqtSignal(bool)  # Signal emitted when mic button is clicked, with start/stop flag
     
     def __init__(self, args, orchestrator_control=None):
         super().__init__()
@@ -208,7 +208,7 @@ class MainWindow(QMainWindow):
         # Connect our signals to controller
         self.command_initiated.connect(self.controller.process_command)
         self.settings_changed.connect(self.controller.update_settings)
-        self.mic_button_clicked.connect(self.controller.start_voice_recognition)
+        self.mic_button_clicked.connect(self.controller.toggle_voice_recognition)
         
         # Connect model change notifications
         self.model.messages_changed.connect(self.update_chat_display)
@@ -280,22 +280,33 @@ class MainWindow(QMainWindow):
 
     def record_voice_input(self):
         """Handle mic button click to record voice input"""
+        # If already recording, stop it
+        if hasattr(self, 'is_recording') and self.is_recording:
+            self.is_recording = False
+            self.mic_button_clicked.emit(False)  # Signal to stop recording
+            return
+            
         # Check if orchestrator and STT engine are available
         if not self.controller.orchestrator or not self.controller.orchestrator.stt_engine:
             self.controller.handle_log("Speech-to-Text engine not initialized. Please check your configuration.")
             return
             
-        self.mic_button.setEnabled(False)
-        self.mic_button.setToolTip("Recording...")
+        # Start new recording
+        self.is_recording = True
+        self.mic_button.setEnabled(True)  # Keep enabled to allow stopping
+        self.mic_button.setToolTip("Click to stop recording")
         
         # Visual indicator that recording is active
         self.mic_button.setStyleSheet("background-color: #ff5252;")  # Red background while recording
         
         # Send signal to start recording
-        self.mic_button_clicked.emit()
+        self.mic_button_clicked.emit(True)  # Signal to start recording
         
     def set_transcribed_text(self, text, auto_submit=False):
         """Set transcribed text to the input field"""
+        # Reset recording state
+        self.is_recording = False
+        
         if text:
             self.chat_input.setText(text)
             self.chat_input.setFocus()
@@ -474,12 +485,28 @@ class MainWindowController:
         text_edit.setTextCursor(cursor)
         text_edit.ensureCursorVisible()
     
-    def start_voice_recognition(self):
-        """Start voice recognition when mic button is clicked"""
+    def toggle_voice_recognition(self, start_recording):
+        """Toggle voice recognition on/off when mic button is clicked"""
+        # If stopping recording
+        if not start_recording:
+            if hasattr(self, 'voice_worker') and self.voice_worker.isRunning():
+                self.voice_worker.stop_recording = True
+                self.model.add_message("System", "Recording stopped by user.")
+                
+                # Reset mic button in main window
+                if self._main_window:
+                    self._main_window.mic_button.setEnabled(True)
+                    self._main_window.mic_button.setStyleSheet("")
+                    self._main_window.mic_button.setToolTip("Record voice input")
+            return
+        
+        # Starting recording
         if not self.orchestrator or not self.orchestrator.stt_engine:
             self.model.add_message("System", "Speech-to-Text engine not initialized.")
             if self._main_window:
                 self._main_window.mic_button.setEnabled(True)
+                self._main_window.mic_button.setStyleSheet("")
+                self._main_window.is_recording = False
             return
         
         # Create a separate thread for audio recording to avoid UI freezing
@@ -489,17 +516,21 @@ class MainWindowController:
             def __init__(self, stt_engine):
                 super().__init__()
                 self.stt_engine = stt_engine
+                self.stop_recording = False
                 
             def run(self):
                 try:
-                    transcribed_text = self.stt_engine.listen_and_transcribe(record_duration=10.0)
+                    transcribed_text = self.stt_engine.listen_and_transcribe(
+                        record_duration=10.0, 
+                        stop_flag=lambda: self.stop_recording
+                    )
                     self.transcription_done.emit(transcribed_text or "")
                 except Exception as e:
                     self.transcription_done.emit("")
                     print(f"Voice recognition error: {e}")
         
         # Add status message
-        self.model.add_message("System", "Listening... (speak clearly, up to 10 seconds)")
+        self.model.add_message("System", "Listening... (speak clearly, max 10 seconds)")
         
         # Start worker thread
         self.voice_worker = VoiceRecognitionWorker(self.orchestrator.stt_engine)
@@ -507,6 +538,10 @@ class MainWindowController:
             lambda text: self.handle_voice_transcription(text)
         )
         self.voice_worker.start()
+    
+    def start_voice_recognition(self):
+        """Original method - now redirects to toggle"""
+        self.toggle_voice_recognition(True)
     
     def handle_voice_transcription(self, text):
         """Handle transcribed text from STT engine"""
