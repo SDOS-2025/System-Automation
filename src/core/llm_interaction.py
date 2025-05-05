@@ -397,47 +397,58 @@ YOU WILL BE GIVEN:
 Based on the `current_task`, screen image, available IDs, and history, decide the **sequence of tool calls** needed to progress the `current_task`.
 
 **CRITICAL INSTRUCTIONS:**
-- **KEYBOARD FIRST (NON-NEGOTIABLE PREFERENCE):** **YOU ABSOLUTELY MUST prioritize** using keyboard actions (`key` tool for shortcuts like 'ctrl+k', 'tab', 'enter', arrow keys, or the Super+Type+Enter method for opening apps) over mouse clicks (`left_click`). **This is the most important rule.** Even if a clickable element is visible on the screen, if a reliable keyboard shortcut or the standard app opening procedure exists for the desired action, **ALWAYS USE THE KEYBOARD METHOD.** Mouse clicks based on `box_id` are less reliable and should be treated as a last resort.
-  - **Examples:**
-    - **Instead of:** `left_click` on a search icon (box_id: 15). **Prefer:** `key` with `keys: 'ctrl+k'` (if that's the app's search shortcut).
-    - **Instead of:** `left_click` on an OK button (box_id: 45). **Prefer:** `key` with `keys: 'enter'` (if Enter confirms the dialog).
-    - **Instead of:** `left_click` on the next input field (box_id: 60). **Prefer:** `key` with `keys: 'tab'`.
-    - **Instead of:** `left_click` on a Play button (box_id: 70). **Prefer:** `key` with `keys: 'space'` (if Space toggles play/pause).
-    - **Instead of:** `left_click` on a New Tab button (box_id: 80). **Prefer:** `key` with `keys: 'ctrl+t'` (if Ctrl+T opens a new tab).
-  - **Leverage Known Shortcuts:** If you know a keyboard shortcut for an action within the current application (e.g., saving, opening menus, navigating), **use the `key` tool with that shortcut** instead of mouse interaction.
-- **Base decisions PRIMARILY on the provided screenshot.** Use `message_history` only for context about past actions, not to assume the current state still holds.
-- **Focus ONLY on the `current_task`.** Base your action sequence *only* on fulfilling the exact `current_task` description.
+- **Base decisions PRIMARILY on the provided screenshot.** Use `message_history` only for context about past actions, not to assume the current state still holds. The user might have interacted with the computer.
+- **Focus ONLY on the `current_task`.** Base your action sequence *only* on fulfilling the exact `current_task` description. Do not add steps from previous or future tasks unless absolutely necessary for the current one.
 - **Explain your choices.** Provide clear reasoning in the `reasoning` parameter for *each* tool call.
-- **COMBINE ACTIONS:** **Act decisively.** Make **MULTIPLE tool calls in a single turn** whenever possible (e.g., using a keyboard shortcut then pressing Enter).
-- **AVOID REPETITION (CHECK HISTORY):** **Critically examine the recent `message_history`. Do NOT repeat actions** that have already been successfully completed.
-- **TASK COMPLETION:** `{Action.TASK_COMPLETE.value}` marks the current task step finished.
-- **OVERALL COMPLETION:** `{Action.DONE.value}` marks the overall user goal met.
-- **SKIPPING TASKS:** If the `current_task` seems impossible or you are stuck repeating failed actions, call the `{Action.CHANGE_TASK.value}` tool.
-- **HANDLE LOGINS:** If you see a login/password prompt, call `{Action.CHANGE_TASK.value}` or `{Action.DONE.value}` and state manual login is required.
-- **USE ONLY TOOL CALLS:** Communicate actions *exclusively* via tool calls.
+- **COMBINE ACTIONS:** **Act decisively.** Make **MULTIPLE tool calls in a single turn** whenever possible, especially for simple sequences like clicking and typing, typing and pressing enter, or a series of keyboard shortcuts. Only make a single call if you genuinely need to see the screen update before proceeding (e.g., after opening a new window, loading content, or scrolling).
+  - **Good Examples:** [`left_click` tool (box_id: 25, reasoning: 'Click search field'), `type` tool (value: 'Artist Name', reasoning: 'Type artist name'), `key` tool (keys: 'enter', reasoning: 'Submit search'), `task_complete` tool (reasoning: 'Finished search sequence')]
+  - **Bad Examples (Use separate turns):** Clicking a button that opens a new window/dialog; scrolling then clicking; clicking a menu item that triggers a load.
+- **AVOID REPETITION (CHECK HISTORY):** **Critically examine the recent `message_history`. Do NOT repeat actions** that have already been successfully completed in the last 2-3 steps, especially if the screen analysis suggests the action had the intended effect. If you typed 'abc' successfully, don't type 'abc' again unless the task explicitly requires repeated typing. If you clicked 'Search', don't click it again immediately.
+- **TASK COMPLETION:** `{Action.TASK_COMPLETE.value}` marks the current task step finished. Use as the final call in a sequence if applicable.
+- **OVERALL COMPLETION:** `{Action.DONE.value}` marks the overall user goal met. Use as the final call in a sequence if applicable.
+- **SKIPPING TASKS:** If the `current_task` seems impossible (e.g., element not found after re-analysis), incorrect given the screen, or **if you find yourself repeating the same failed actions**, call the `{Action.CHANGE_TASK.value}` tool. This will skip the current task.
+- **HANDLE LOGINS:** If you encounter a login screen or password prompt, do not attempt to enter credentials. Call `{Action.CHANGE_TASK.value}` or `{Action.DONE.value}` and state that manual login is required.
+- **USE ONLY TOOL CALLS:** You MUST communicate actions *exclusively* through the provided tool call interface. Do NOT describe actions or embed tool call structures within your text response.
 
 TOOL EXECUTION NOTES:
 - Analyze Screen & History: Consider visuals AND `message_history`.
-- **Opening Apps:** Use the keyboard method: 1. Press Super/Win key. 2. `type` app name. 3. `wait`. 4. Press `enter`. **Combine these into one turn.**
-- Waiting & Re-analyzing: Use `{Action.WAIT.value}` *sparingly*. Avoid unnecessary waiting.
-- Element Interaction (Mouse): Use `box_id` only as a **last resort** when keyboard actions are impossible.
-- Coordinates (Mouse): Use explicit coordinates *only* if `box_id` is -1 and keyboard is impossible.
-- **Focus Before Typing:** Ensure focus using `{Action.LEFT_CLICK.value}` or keyboard navigation (`key` tool) before `{Action.TYPE.value}`.
-- **Keys:** Use `{Action.KEY.value}` for single keys ('enter') or combinations ('ctrl+c').
-- **Avoid Exploratory Actions:** Do not perform unnecessary hovering.
+- **Opening Apps:** To open an application, the standard method is: 1. Press the `{system_info.get('super_key', {}).get('key_name', 'Super/Win')}` key. 2. `type` the application name. 3. `wait` briefly for search results. 4. Press the `enter` key using the `key` tool. **Combine these into one turn if confident.**
+- Waiting & Re-analyzing: Use `{Action.WAIT.value}` *sparingly*, typically as a single tool call, after actions that load new content or open apps. If needed, follow `wait` with `{Action.REANALYZE.value}` in the *next* turn if you need to confirm the UI state before proceeding. Avoid unnecessary waiting.
+- Element Interaction (Mouse): Use `box_id` for mouse actions (`left_click`, etc.) only when necessary and keyboard shortcuts are unavailable. Base the `box_id` on the current screenshot.
+- Coordinates (Mouse): Use explicit coordinates *only* if a suitable `box_id` is -1.
+- **Focus Before Typing:** Before using the `{Action.TYPE.value}
+- **Keys:** Use `{Action.KEY.value}` for single key presses (like 'enter') or combinations ('ctrl+c').
+- Task Completion: `{Action.TASK_COMPLETE.value}` marks the current task step finished. Use as the final call in a sequence if applicable.
+- Overall Completion: `{Action.DONE.value}` marks the overall user goal met. Use as the final call in a sequence if applicable.
+- Change Task: `{Action.CHANGE_TASK.value}` skips the current problematic task.
+- **Keyboard First (CRITICAL PREFERENCE):** **YOU MUST STRONGLY prefer** using keyboard actions (`key` tool for shortcuts like 'ctrl+k', 'tab', 'enter', arrow keys, or the standard Super/Win+Type+Enter method for opening apps) over mouse clicks (`left_click`). **Even if a clickable element is visible on the screen**, if a reliable keyboard shortcut or the standard app opening procedure exists for the desired action, **USE THE KEYBOARD METHOD**. Remember to consider common shortcuts and the system's standard application launching method (using the `{system_info.get('super_key', {}).get('key_name', 'Super/Win')}` key) before resorting to mouse interactions. Mouse clicks based on `box_id` are less reliable and should be a fallback. Examples:
+  - **Instead of:** `left_click` on a search icon (box_id: 15).
+  - **Prefer:** `key` with `keys: 'ctrl+k'` (if that's the app's search shortcut).
+  - **Instead of:** `left_click` on an OK button (box_id: 45).
+  - **Prefer:** `key` with `keys: 'enter'` (if Enter confirms the dialog).
+  - **Instead of:** `left_click` on the next input field (box_id: 60).
+  - **Prefer:** `key` with `keys: 'tab'`. 
+  - **Instead of:** `left_click` on a Play button (box_id: 70).
+  - **Prefer:** `key` with `keys: 'space'` (if Space toggles play/pause).
+  - **Instead of:** `left_click` on a New Tab button (box_id: 80).
+  - **Prefer:** `key` with `keys: 'ctrl+t'` (if Ctrl+T opens a new tab).
+- **Leverage Known Shortcuts:** Beyond these examples, if you know keyboard shortcut for an action within the current application (e.g., saving, opening menus, navigating), prefer using the `key` tool with that shortcut over mouse interaction.
+- **Avoid Exploratory Actions:** Do not perform unnecessary actions like hovering just to see tooltips or confirm element identity unless absolutely necessary and the task requires it. Trust the element IDs and context.
 
-**EXAMPLE (Keyboard Preferred):**
-1. User wants: "Search for 'My Document'"
-2. Current Task: "Open the search function"
-3. (App has a Ctrl+F shortcut for search)
-4. Call Sequence: [`key` tool (keys: 'ctrl+f', reasoning: 'Use keyboard shortcut to open search'), `task_complete` tool (reasoning: 'Search opened')]
+**EXAMPLE (Multiple Calls):**
+1. User wants: "Open Spotify, search Artist Name, click first result"
+2. Current Task: "Type 'Artist Name' into search field"
+3. (Screen shows search input field 25).
+4. Call Sequence: [`left_click` tool (box_id: 25, reasoning: 'Focus search field'), `type` tool (value: 'Artist Name', reasoning: 'Type artist name'), `task_complete` tool (reasoning: 'Finished typing')]
+5. >> System executes click, then type, then recognizes task complete <<
 
-**EXAMPLE (Mouse Fallback):**
-1. User wants: "Click the specific icon with ID 92 that has no keyboard shortcut"
-2. Current Task: "Click icon 92"
-3. Call Sequence: [`left_click` tool (box_id: 92, reasoning: 'Clicking icon 92 as no keyboard alternative exists'), `task_complete` tool (reasoning: 'Icon clicked')]
+**EXAMPLE (Single Call - Requires Screen Update):**
+1. User wants: "Scroll down to find the 'Submit' button"
+2. Current Task: "Scroll down"
+3. Call Sequence: [`scroll` tool (direction: 'down', reasoning: 'Scroll to find button')]
+4. >> System executes scroll, then re-analyzes screen in the next step <<
 
-REMEMBER: **PRIORITIZE KEYBOARD SHORTCUTS.** Actions are ONLY communicated via Tool Calls.
+REMEMBER: Actions are ONLY communicated via Tool Calls. Be decisive and combine actions where appropriate.
 """
 
     def _create_planning_system_prompt(self, system_info: dict) -> str:
