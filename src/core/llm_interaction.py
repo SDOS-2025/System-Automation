@@ -498,7 +498,7 @@ Please provide your response ONLY in the following JSON format:
 - **Completeness is Key:** The `task_list` MUST contain ALL the necessary steps to get from the current state to the final goal of the user's request.
 - **Think Ahead:** Anticipate the intermediate steps required. For example, if the user asks to search for something, the plan needs steps like 'Click search icon', 'Type search query', 'Wait for results', 'Click result'. Don't just plan the very first click.
 - **Concise Actions:** Keep each task description brief and focused on a single logical action (click, type, wait, scroll, etc.).
-- **Refer Functionally:** Refer to elements by their function or appearance (e.g., "Click the search icon", "Type in the main text field"); the execution agent will handle finding the correct element ID later using the screenshot at that step.
+- **Refer Functionally - NO IDs:** Refer to elements by their function or appearance (e.g., "Click the search icon", "Type in the main text field"). **CRITICAL: Do NOT include the element ID (e.g., `(id 15)`) in the task descriptions within the `task_list` output.** The execution agent will handle finding the correct element ID later using the screenshot at that step.
 - **Logical Flow:** Ensure the tasks logically progress towards fulfilling the user requirement.
 - **Stick to JSON:** Adhere strictly to the JSON format.
 
@@ -511,7 +511,7 @@ Output:
 {{
   "reasoning": "The user wants to create and save a text file. First, I need to open the editor by clicking its icon. Then, I need to type the specified text. Finally, I need to initiate the save process (likely via a menu), type the filename, and confirm the save, potentially navigating to the desktop if needed (assuming default save location isn't desktop).",
   "task_list": [
-    "Click the text editor icon (id 15)",
+    "Click the text editor icon",
     "Wait for the editor window to open",
     "Type 'Hello World' into the editor window",
     "Click the 'File' menu",
