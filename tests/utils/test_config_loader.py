@@ -37,7 +37,7 @@ class TestConfigLoader(unittest.TestCase):
         self.assertEqual(config.get("project_name"), "Jarvis Assistant")
         self.assertEqual(config.get("version"), 0.1)
         self.assertIn("llm", config)
-        self.assertEqual(config["llm"].get("model"), "gpt-4.1-mini")
+        self.assertEqual(config["llm"].get("model"), "gpt-4o-mini")
 
     def test_load_non_existent_config(self):
         """Test loading a path that does not exist."""

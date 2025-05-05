@@ -99,7 +99,7 @@ def test_execute_scroll_missing_direction(executor):
     mock_pyautogui.reset_mock()
     result = executor.execute("scroll")
     assert not result.success
-    assert "'direction' argument required" in result.error
+    assert "Invalid scroll direction" in result.error
     mock_pyautogui.scroll.assert_not_called()
 
 def test_execute_scroll_invalid_direction(executor):

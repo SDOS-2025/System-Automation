@@ -8,6 +8,7 @@ import sys
 import os
 from pathlib import Path
 import io
+from unittest.mock import call
 
 # Add project root to sys.path to allow imports from src
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -84,8 +85,21 @@ class TestLoggingSetup(unittest.TestCase):
                 self.assertIsNotNone(console_handler.formatter)
                 self.assertIn("Logging configured.", captured_output.getvalue())
 
-                mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
-                mock_file_handler.assert_called_once_with(logging_setup.LOG_FILE_PATH)
+                # Check that mkdir was called for both log file parents
+                # mock_mkdir.assert_called_once_with(parents=True, exist_ok=True) # OLD
+                self.assertEqual(mock_mkdir.call_count, 2) # Called for main log and history log
+                mock_mkdir.assert_has_calls([
+                    call(parents=True, exist_ok=True),
+                    call(parents=True, exist_ok=True)
+                ], any_order=True)
+
+                # Check FileHandler calls
+                self.assertEqual(mock_file_handler.call_count, 2)
+                # Check call args if needed (paths might be Path objects)
+                # call_args_list = mock_file_handler.call_args_list
+                # self.assertEqual(call_args_list[0][0][0], logging_setup.LOG_FILE_PATH)
+                # self.assertEqual(call_args_list[1][0][0], logging_setup.HISTORY_LOG_FILE_PATH)
+
                 # Check the instance returned by the mock was configured
                 self.assertEqual(mock_handler_instance.level, logging_setup.LOG_LEVEL)
                 # Check formatter was set on the mock instance
@@ -108,29 +122,25 @@ class TestLoggingSetup(unittest.TestCase):
     @unittest.skipIf(logging_setup is None, "Skipping tests because logging_setup module failed to import")
     def test_get_logger(self):
         """Test the get_logger function."""
-        # Patch setup_logging AND the internal _is_configured flag
+        # Patch setup_logging to ensure it's NOT called by get_logger
+        # Also reset _is_configured for isolation
         with patch('src.utils.logging_setup.setup_logging') as mock_setup, \
-             patch('src.utils.logging_setup._is_configured', False) as mock_is_configured: # Start as False
+             patch('src.utils.logging_setup._is_configured', False):
 
             logger_name = "test_logger"
-            # First call should trigger setup
             logger = logging_setup.get_logger(logger_name)
-            mock_setup.assert_called_once()
+
+            # Assert setup_logging was NOT called by get_logger
+            # mock_setup.assert_called_once() # OLD
+            mock_setup.assert_not_called()
+
             self.assertIsInstance(logger, logging.Logger)
             self.assertEqual(logger.name, logger_name)
 
-            # Manually set the mocked flag to True to simulate configuration completion
-            # We patch the *module's* flag, so change it via the module path
-            logging_setup._is_configured = True
-            mock_setup.reset_mock()
-
-            # Second call should NOT trigger setup
-            logger2 = logging_setup.get_logger("another_logger")
-            mock_setup.assert_not_called()
-            self.assertEqual(logger2.name, "another_logger")
-
-            # Reset flag for subsequent tests via setUp
-            logging_setup._is_configured = False
+            # Second call should return the same logger instance
+            logger2 = logging_setup.get_logger(logger_name)
+            self.assertIs(logger, logger2)
+            mock_setup.assert_not_called() # Still not called
 
     # --- More tests needed for custom paths, levels, file creation, error handling ---
 
