@@ -52,7 +52,7 @@ The system can:
 # cd SystemAutomation
 
 # Create conda environment (recommended)
-conda create -n sysauto python=3.11 -y # Or your preferred Python 3.10+ version
+conda create -n sysauto python=3.12 -y # Or your preferred Python 3.10+ version
 conda activate sysauto
 
 # Install core dependencies
