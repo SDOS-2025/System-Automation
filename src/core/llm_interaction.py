@@ -400,24 +400,23 @@ Based on the `current_task`, screen image, available IDs, and history, decide th
 - **Base decisions PRIMARILY on the provided screenshot.** Use `message_history` only for context about past actions, not to assume the current state still holds. The user might have interacted with the computer.
 - **Focus ONLY on the `current_task`.** Base your action sequence *only* on fulfilling the exact `current_task` description. Do not add steps from previous or future tasks unless absolutely necessary for the current one.
 - **Explain your choices.** Provide clear reasoning in the `reasoning` parameter for *each* tool call.
-- **You can make MULTIPLE tool calls in a single turn IF you are highly confident they can be executed consecutively without needing to see the screen state in between.** 
-  - **Good Examples:** Clicking an input field then immediately typing; clicking, typing, then pressing Enter in a search field; pressing a sequence of hotkeys.
+- **COMBINE ACTIONS:** **Act decisively.** Make **MULTIPLE tool calls in a single turn** whenever possible, especially for simple sequences like clicking and typing, typing and pressing enter, or a series of keyboard shortcuts. Only make a single call if you genuinely need to see the screen update before proceeding (e.g., after opening a new window, loading content, or scrolling).
+  - **Good Examples:** [`left_click` tool (box_id: 25, reasoning: 'Click search field'), `type` tool (value: 'Artist Name', reasoning: 'Type artist name'), `key` tool (keys: 'enter', reasoning: 'Submit search'), `task_complete` tool (reasoning: 'Finished search sequence')]
   - **Bad Examples (Use separate turns):** Clicking a button that opens a new window/dialog; scrolling then clicking; clicking a menu item that triggers a load.
-- **If uncertain, make only ONE tool call.**
-- **AVOID REPETITION:** Check the recent `message_history`. Do not repeat actions that have already been successfully completed in the last few steps. For example, if you just successfully typed text, do not type it again in the next step unless the task explicitly requires it.
+- **AVOID REPETITION (CHECK HISTORY):** **Critically examine the recent `message_history`. Do NOT repeat actions** that have already been successfully completed in the last 2-3 steps, especially if the screen analysis suggests the action had the intended effect. If you typed 'abc' successfully, don't type 'abc' again unless the task explicitly requires repeated typing. If you clicked 'Search', don't click it again immediately.
 - **TASK COMPLETION:** `{Action.TASK_COMPLETE.value}` marks the current task step finished. Use as the final call in a sequence if applicable.
 - **OVERALL COMPLETION:** `{Action.DONE.value}` marks the overall user goal met. Use as the final call in a sequence if applicable.
-- **SKIPPING TASKS:** If the `current_task` seems impossible (e.g., element not found after re-analysis), incorrect given the screen, or if you are stuck in a loop after trying different approaches (especially repetitive failures), call the `{Action.CHANGE_TASK.value}` tool. This will skip the current task.
+- **SKIPPING TASKS:** If the `current_task` seems impossible (e.g., element not found after re-analysis), incorrect given the screen, or **if you find yourself repeating the same failed actions**, call the `{Action.CHANGE_TASK.value}` tool. This will skip the current task.
 - **HANDLE LOGINS:** If you encounter a login screen or password prompt, do not attempt to enter credentials. Call `{Action.CHANGE_TASK.value}` or `{Action.DONE.value}` and state that manual login is required.
 - **USE ONLY TOOL CALLS:** You MUST communicate actions *exclusively* through the provided tool call interface. Do NOT describe actions or embed tool call structures within your text response.
 
 TOOL EXECUTION NOTES:
 - Analyze Screen & History: Consider visuals AND `message_history`.
-- **Opening Apps:** To open an application, the standard method is: 1. Press the `{system_info.get('super_key', {}).get('key_name', 'Super/Win')}` key. 2. `type` the application name. 3. `wait` briefly for search results. 4. Press the `enter` key using the `key` tool.
-- Waiting & Re-analyzing: Use `{Action.WAIT.value}` usually as a *single* tool call, especially after actions that load new content or open apps. If needed, follow `wait` with `{Action.REANALYZE.value}` in the *next* turn if you need to confirm the UI state before proceeding.
+- **Opening Apps:** To open an application, the standard method is: 1. Press the `{system_info.get('super_key', {}).get('key_name', 'Super/Win')}` key. 2. `type` the application name. 3. `wait` briefly for search results. 4. Press the `enter` key using the `key` tool. **Combine these into one turn if confident.**
+- Waiting & Re-analyzing: Use `{Action.WAIT.value}` *sparingly*, typically as a single tool call, after actions that load new content or open apps. If needed, follow `wait` with `{Action.REANALYZE.value}` in the *next* turn if you need to confirm the UI state before proceeding. Avoid unnecessary waiting.
 - Element Interaction (Mouse): Use `box_id` for mouse actions (`left_click`, etc.) only when necessary and keyboard shortcuts are unavailable. Base the `box_id` on the current screenshot.
 - Coordinates (Mouse): Use explicit coordinates *only* if a suitable `box_id` is -1.
-- **Focus Before Typing:** Before using the `{Action.TYPE.value}` tool, make sure the correct input field has focus. This might require a preceding `{Action.LEFT_CLICK.value}` or keyboard navigation (`key` tool with 'tab' or arrows).
+- **Focus Before Typing:** Before using the `{Action.TYPE.value}
 - **Keys:** Use `{Action.KEY.value}` for single key presses (like 'enter') or combinations ('ctrl+c').
 - Task Completion: `{Action.TASK_COMPLETE.value}` marks the current task step finished. Use as the final call in a sequence if applicable.
 - Overall Completion: `{Action.DONE.value}` marks the overall user goal met. Use as the final call in a sequence if applicable.
@@ -428,27 +427,28 @@ TOOL EXECUTION NOTES:
   - **Instead of:** `left_click` on an OK button (box_id: 45).
   - **Prefer:** `key` with `keys: 'enter'` (if Enter confirms the dialog).
   - **Instead of:** `left_click` on the next input field (box_id: 60).
-  - **Prefer:** `key` with `keys: 'tab'`.
+  - **Prefer:** `key` with `keys: 'tab'`. 
   - **Instead of:** `left_click` on a Play button (box_id: 70).
   - **Prefer:** `key` with `keys: 'space'` (if Space toggles play/pause).
   - **Instead of:** `left_click` on a New Tab button (box_id: 80).
   - **Prefer:** `key` with `keys: 'ctrl+t'` (if Ctrl+T opens a new tab).
 - **Leverage Known Shortcuts:** Beyond these examples, if you know keyboard shortcut for an action within the current application (e.g., saving, opening menus, navigating), prefer using the `key` tool with that shortcut over mouse interaction.
+- **Avoid Exploratory Actions:** Do not perform unnecessary actions like hovering just to see tooltips or confirm element identity unless absolutely necessary and the task requires it. Trust the element IDs and context.
 
 **EXAMPLE (Multiple Calls):**
 1. User wants: "Open Spotify, search Artist Name, click first result"
-2. Current Task: "Type 'Artist Name'"
+2. Current Task: "Type 'Artist Name' into search field"
 3. (Screen shows search input field 25).
-4. Call Sequence: [`left_click` tool (box_id: 25), `type` tool (value: 'Artist Name'), `task_complete` tool (reasoning: Finished typing 'Artist Name')]
+4. Call Sequence: [`left_click` tool (box_id: 25, reasoning: 'Focus search field'), `type` tool (value: 'Artist Name', reasoning: 'Type artist name'), `task_complete` tool (reasoning: 'Finished typing')]
 5. >> System executes click, then type, then recognizes task complete <<
 
-**EXAMPLE (Single Call):**
+**EXAMPLE (Single Call - Requires Screen Update):**
 1. User wants: "Scroll down to find the 'Submit' button"
 2. Current Task: "Scroll down"
-3. Call Sequence: [`scroll` tool (direction: 'down')]
+3. Call Sequence: [`scroll` tool (direction: 'down', reasoning: 'Scroll to find button')]
 4. >> System executes scroll, then re-analyzes screen in the next step <<
 
-REMEMBER: Actions are ONLY communicated via Tool Calls.
+REMEMBER: Actions are ONLY communicated via Tool Calls. Be decisive and combine actions where appropriate.
 """
 
     def _create_planning_system_prompt(self, system_info: dict) -> str:
