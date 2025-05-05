@@ -14,19 +14,14 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # Now import the module to test
 try:
     from src.utils import download_models
-except ImportError as e:
-    # Handle case where module might not be found during test discovery
-    # This might happen depending on how tests are run
-    print(f"Error importing download_models: {e}")
-    download_models = None # Set to None to avoid errors later if import fails
+except ImportError:
+    download_models = None
 
-# Define expected paths relative to the test file or a known structure
-TEST_UTILS_DIR = Path(__file__).resolve().parent
-TEST_TESTS_DIR = TEST_UTILS_DIR.parent
-TEST_SYSTEM_AUTOMATION_DIR = TEST_TESTS_DIR.parent
-EXPECTED_PROJECT_ROOT = TEST_SYSTEM_AUTOMATION_DIR.parent # Should match PROJECT_ROOT above
+# Define expected paths relative to the ACTUAL project root (SystemAutomation)
+# WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent # Workspace root (/home/poodle/Work/newTry5)
+EXPECTED_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent # Correct: System-Automation dir
 EXPECTED_WEIGHTS_DIR = EXPECTED_PROJECT_ROOT / "weights"
-EXPECTED_CACHE_SUBDIR = "modelscope_cache"
+EXPECTED_CACHE_SUBDIR = "modelscope_cache" # Match constant in download_models
 
 class TestDownloadModels(unittest.TestCase):
 
@@ -54,6 +49,7 @@ class TestDownloadModels(unittest.TestCase):
         """Test that download_model_weights calls snapshot_download correctly."""
         test_model_id = "test/model-id"
         test_file_pattern = "model.pt"
+        # Calculate expected cache path based on corrected EXPECTED_WEIGHTS_DIR
         expected_cache_path = EXPECTED_WEIGHTS_DIR / EXPECTED_CACHE_SUBDIR
 
         download_models.download_model_weights(
@@ -62,12 +58,15 @@ class TestDownloadModels(unittest.TestCase):
         )
 
         # Check that mkdir was called to create the weights dir
+        # It should be called on WEIGHTS_DIR
         mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
+        # Check that the call happened on the correct path object instance if needed
+        # Example: self.assertEqual(mock_mkdir.call_args[0][0], download_models.WEIGHTS_DIR)
 
         # Check that snapshot_download was called once with the correct args
         mock_snapshot_download.assert_called_once_with(
             model_id=test_model_id,
-            cache_dir=str(expected_cache_path),
+            cache_dir=str(expected_cache_path), # Use the corrected expected path
             allow_patterns=[test_file_pattern]
         )
 

@@ -43,10 +43,11 @@ class TestActionModels(unittest.TestCase):
 
     def test_action_result_bool(self):
         """Test the boolean representation of ActionResult."""
-        self.assertFalse(bool(ActionResult()))
-        self.assertTrue(bool(ActionResult(output="Data")))
-        self.assertTrue(bool(ActionResult(error="Issue")))
-        self.assertTrue(bool(ActionResult(output="Data", error="Issue")))
+        self.assertTrue(bool(ActionResult()))
+        self.assertTrue(bool(ActionResult(output="OK")))
+        self.assertFalse(bool(ActionResult(error="Failed")))
+        self.assertFalse(bool(ActionResult(output="OK", error="Failed")))
+        self.assertFalse(bool(ActionResult(success=False)))
 
     def test_action_result_add(self):
         """Test combining ActionResult instances using +."""
@@ -61,17 +62,19 @@ class TestActionModels(unittest.TestCase):
         self.assertEqual(combined1.output, "First\nSecond")
         self.assertIsNone(combined1.error)
 
-        # Output + Error (Error takes precedence)
+        # Output + Error (Error takes precedence, output is kept)
         combined2 = res_out1 + res_err1
-        self.assertIsNone(combined2.output)
+        self.assertEqual(combined2.output, "First")
         self.assertEqual(combined2.error, "Error1")
+        self.assertFalse(combined2.success)
 
-        # Error + Output (Error takes precedence)
+        # Error + Output (Error takes precedence, output is kept)
         combined3 = res_err1 + res_out1
-        self.assertIsNone(combined3.output)
+        self.assertEqual(combined3.output, "First")
         self.assertEqual(combined3.error, "Error1")
+        self.assertFalse(combined3.success)
 
-        # Error + Error (First error takes precedence)
+        # Error + Error (First error is kept)
         combined4 = res_err1 + res_err2
         self.assertIsNone(combined4.output)
         self.assertEqual(combined4.error, "Error1")
