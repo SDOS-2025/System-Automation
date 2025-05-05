@@ -10,7 +10,7 @@ openai:
   api_key: "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" # Placeholder - loaded from env var by llm_interaction.py
   model: "gpt-4.1-mini" # Or another suitable model like gpt-3.5-turbo
   stt_model: "whisper-1"
-  stt_language: "en-IN" # ISO 639-1 code for desired STT language (e.g., en, es, fr, en-IN)
+  stt_language: "en" # ISO 639-1 code for desired STT language (e.g., en, es, fr)
   tts_model: "tts-1"
   tts_voice: "alloy" # alloy, echo, fable, onyx, nova, shimmer
 
