@@ -360,9 +360,25 @@ class LLMInteraction:
             raise ValueError("OpenAI API key not found in configuration.")
 
         self.model = get_config_value("openai.model", "gpt-4.1-mini")
-        self.client = OpenAI(api_key=self.api_key)
+        self.base_url = get_config_value("openai.base_url", "https://api.openai.com/v1")
+        
+        # Initialize OpenAI client with base_url if it's set
+        client_kwargs = {
+            "api_key": self.api_key,
+            "base_url": self.base_url
+        }
+        
+        # Add default headers for OpenRouter if using their API
+        if "openrouter.ai" in self.base_url:
+            client_kwargs["default_headers"] = {
+                "HTTP-Referer": "https://github.com/SDOS-2025/System-Automation",  # Required for OpenRouter
+                "X-Title": "System-Automation"  # Optional, helps OpenRouter identify your app
+            }
+            
+        self.client = OpenAI(**client_kwargs)
+        
         self.tools = get_tools_schema() # Store tool schema
-        logger.info(f"OpenAI client initialized for model: {self.model} with tools.")
+        logger.info(f"OpenAI client initialized with model: {self.model}, using API endpoint: {self.base_url}")
 
     def _create_system_prompt(self, system_info: dict) -> str:
         """Creates the system prompt instructing the agent to use tools."""
