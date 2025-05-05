@@ -8,7 +8,6 @@ import openai # Import for potential exception testing
 from src.core.llm_interaction import (
     LLMInteraction,
     TaskPlanResponse,
-    create_dynamic_execution_response_model,
     Action,
     logger # Import logger if we want to test log messages
 )
@@ -79,73 +78,88 @@ def test_get_task_plan_mocked(llm_interaction):
     assert any(item['type'] == 'image_url' for item in messages[1]['content'])
 
 def test_get_next_action_mocked(llm_interaction):
-    """Test get_next_action with a mocked OpenAI API call."""
+    """Test get_next_action with a mocked OpenAI API call using Tool Calling."""
     mock_openai_client = llm_interaction._mock_openai_client
 
-    # Define the expected structure and data for the *dynamic* response
-    box_ids = [elem['element_id'] for elem in SAMPLE_SCREEN_ANALYSIS['elements']]
-    ExpectedDynamicModel = create_dynamic_execution_response_model(box_ids + [-1]) # Add -1 as function does
-
-    expected_response_data = {
-        "reasoning": "Mock action reasoning.",
-        "next_action": Action.LEFT_CLICK,
+    # --- Mock the OpenAI API response for tool calls --- #
+    # Define the tool call structure the LLM is expected to return
+    mock_tool_call_id = "call_abc123"
+    mock_tool_function_name = Action.LEFT_CLICK.value
+    mock_tool_arguments = json.dumps({
         "box_id": 1,
-        "coordinates": None,
-        "value": None,
-        "current_task_id": 0
-    }
-    expected_response_obj = ExpectedDynamicModel(**expected_response_data)
+        "reasoning": "Click the start button."
+        # Coordinates are not provided when box_id is used
+    })
 
-    # Configure the mock create method
-    mock_openai_client.chat.completions.create.return_value = expected_response_obj
+    # Create a mock ChatCompletionMessage with tool_calls
+    mock_response_message = MagicMock()
+    mock_response_message.tool_calls = [
+        MagicMock(
+            id=mock_tool_call_id,
+            type='function',
+            function=MagicMock(
+                name=mock_tool_function_name,
+                arguments=mock_tool_arguments
+            )
+        )
+    ]
 
+    # Create a mock Choice object
+    mock_choice = MagicMock()
+    mock_choice.message = mock_response_message
+    mock_choice.finish_reason = 'tool_calls'
+
+    # Create the final mock Completion object
+    mock_completion = MagicMock()
+    mock_completion.choices = [mock_choice]
+    # ------------------------------------------------------ #
+
+    # Configure the mock create method to return the prepared mock completion
+    mock_openai_client.chat.completions.create.return_value = mock_completion
+
+    # --- Prepare input for get_next_action --- #
     messages = [{"role": "user", "content": "Previous state info..."}]
+    current_task = SAMPLE_TASK_LIST[0] # "Click Start Button"
+    system_info = {"os": "test_os", "version": "1.0"} # Example system info
+    # ----------------------------------------- #
 
-    action_response = llm_interaction.get_next_action(
-        messages=messages,
-        task_list=SAMPLE_TASK_LIST,
-        screen_analysis_results=SAMPLE_SCREEN_ANALYSIS,
-        image_base64=SAMPLE_IMAGE_BASE64,
+    # --- Call the function under test --- #
+    action_sequence = llm_interaction.get_next_action(
+        message_history=messages,
+        current_task=current_task,
+        screen_analysis=SAMPLE_SCREEN_ANALYSIS,
+        base64_image=SAMPLE_IMAGE_BASE64,
+        system_info=system_info
     )
+    # ------------------------------------ #
 
-    assert action_response == expected_response_obj
-
-    # Verify the call to the OpenAI API
+    # --- Assertions --- #
+    # Verify the OpenAI API call arguments
     mock_openai_client.chat.completions.create.assert_called_once()
     call_args, call_kwargs = mock_openai_client.chat.completions.create.call_args
-
     assert call_kwargs['model'] == llm_interaction.model
-    # Check that the *correct type* of dynamic model was passed
-    assert call_kwargs['response_model'].__name__ == ExpectedDynamicModel.__name__
-    # Check messages structure (should include system, history, user text+image)
+    assert 'tools' in call_kwargs # Check that tools schema was passed
+    assert call_kwargs['tool_choice'] == "auto" # Check tool_choice setting
+    # Verify message structure (system, history, current state)
     api_messages = call_kwargs['messages']
+    assert len(api_messages) >= 3 # System, history, current user message
     assert api_messages[0]['role'] == 'system'
     assert api_messages[1]['role'] == 'user' # From history
     assert api_messages[1]['content'] == messages[0]['content']
-    assert api_messages[2]['role'] == 'user' # Added by _prepare_messages
-    assert isinstance(api_messages[2]['content'], list)
-    assert any(item['type'] == 'text' for item in api_messages[2]['content'])
-    assert any(item['type'] == 'image_url' for item in api_messages[2]['content'])
+    assert api_messages[-1]['role'] == 'user' # Last message is the current state/prompt
+    assert isinstance(api_messages[-1]['content'], list)
+    assert any(item['type'] == 'text' and current_task in item['text'] for item in api_messages[-1]['content'])
+    assert any(item['type'] == 'image_url' for item in api_messages[-1]['content'])
 
+    # Assert the parsed action sequence
+    assert isinstance(action_sequence, list)
+    assert len(action_sequence) == 1 # Expecting one action from the mock
+    action, args, reasoning = action_sequence[0]
 
-def test_create_dynamic_execution_response_model():
-    """Test the dynamic creation of the execution response model (remains the same)."""
-    box_ids = [5, 10, 15]
-    DynamicModel = create_dynamic_execution_response_model(box_ids)
-    assert issubclass(DynamicModel, BaseModel)
-    valid_data = {"reasoning": "r", "next_action": "left_click", "box_id": 5, "current_task_id": 0}
-    instance = DynamicModel(**valid_data)
-    assert instance.box_id == 5
-    valid_data_neg_one = {"reasoning": "r", "next_action": "left_click", "box_id": -1, "coordinates": [10, 20], "current_task_id": 0}
-    instance_neg_one = DynamicModel(**valid_data_neg_one)
-    assert instance_neg_one.box_id == -1
-    assert instance_neg_one.coordinates == [10, 20]
-    valid_data_none = {"reasoning": "r", "next_action": "scroll_down", "box_id": None, "current_task_id": 0}
-    instance_none = DynamicModel(**valid_data_none)
-    assert instance_none.box_id is None
-    with pytest.raises((ValidationError, ValueError)):
-        invalid_data = {"reasoning": "r", "next_action": "left_click", "box_id": 99, "current_task_id": 0}
-        DynamicModel(**invalid_data)
+    assert action == Action.LEFT_CLICK
+    assert args == {"box_id": 1, "reasoning": "Click the start button."}
+    assert reasoning == "Click the start button."
+    # ----------------- #
 
 # TODO: Add tests for API error handling (e.g., APIError, RateLimitError)
 # Example:

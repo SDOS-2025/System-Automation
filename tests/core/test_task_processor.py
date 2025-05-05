@@ -13,9 +13,15 @@ from src.core.action_executor import ActionExecutor
 from src.core.action_models import ActionResult
 
 # Sample data
-SAMPLE_CONFIG = {"model": "test_model", "yolo_model_path": "dummy/yolo.pt"}
+SAMPLE_CONFIG = {
+    "openai": {"api_key": "test_key", "model": "test_model"},
+    "screen_analysis": {"yolo_model_path": "dummy/yolo.pt"}
+}
 SAMPLE_USER_REQUIREMENT = "Do something cool."
 SAMPLE_TASK_LIST = ["Task 1: Click Button", "Task 2: Type Text"]
+
+# ADDED: Sample system info
+SAMPLE_SYSTEM_INFO = {"os": "Linux", "version": "TestOS 1.0"}
 
 # Create a dummy PNG image in memory for mocking screen capture
 def create_dummy_image_bytes(width=100, height=50):
@@ -80,7 +86,8 @@ def mock_dependencies():
 def processor(mock_dependencies):
     MockLLM, MockScreen, MockAction = mock_dependencies
     # We pass the config, TaskProcessor will instantiate mocks internally
-    return TaskProcessor(config=SAMPLE_CONFIG)
+    # ADDED system_info argument
+    return TaskProcessor(config=SAMPLE_CONFIG, system_info=SAMPLE_SYSTEM_INFO)
 
 # --- Test Cases ---
 
@@ -89,7 +96,7 @@ def test_task_processor_init(processor, mock_dependencies):
     MockLLM, MockScreen, MockAction = mock_dependencies
     # Check if the correct classes were called during TaskProcessor init
     MockLLM.assert_called_once_with(SAMPLE_CONFIG)
-    MockScreen.assert_called_once_with(yolo_model_path=SAMPLE_CONFIG['yolo_model_path'])
+    MockScreen.assert_called_once_with(yolo_model_path=SAMPLE_CONFIG['screen_analysis']['yolo_model_path'])
     MockAction.assert_called_once_with()
     assert processor.message_history == []
     assert processor.task_list == []
