@@ -163,6 +163,7 @@ class Orchestrator(QObject): # Inherit from QObject
             self.log_signal.emit("Initializing STT Engine...")
             stt_api_key = get_config_value("openai.api_key")
             stt_model = get_config_value("openai.stt_model", "whisper-1")
+            stt_language = get_config_value("openai.stt_language", None) # Read language, default to None
             input_device_index = get_config_value("audio.input_device_index")
 
             if not stt_api_key:
@@ -174,10 +175,12 @@ class Orchestrator(QObject): # Inherit from QObject
             stt_engine_instance = OpenAiSttEngine(
                 api_key=stt_api_key,
                 model=stt_model,
+                language=stt_language, # Pass language to engine
                 input_device_index=input_device_index
             )
-            self.log_signal.emit(f"OpenAI STT Engine ({stt_model}) initialized.")
-            logger.info(f"OpenAI STT Engine ({stt_model}) initialized.")
+            lang_info = f" (Language: {stt_language})" if stt_language else ""
+            self.log_signal.emit(f"OpenAI STT Engine ({stt_model}{lang_info}) initialized.")
+            logger.info(f"OpenAI STT Engine ({stt_model}{lang_info}) initialized.")
             return stt_engine_instance
         except (ValueError, SpeechToTextError) as e:
             msg = f"Failed to initialize STT Engine: {e}"

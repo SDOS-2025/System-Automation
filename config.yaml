@@ -8,9 +8,9 @@ openai:
   # IMPORTANT: Set your OpenAI API key as an environment variable named OPENAI_API_KEY
   # Do not commit your actual key here.
   api_key: "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" # Placeholder - loaded from env var by llm_interaction.py
-  base_url: "https://openrouter.ai/api/v1"  # OpenRouter API endpoint
-  model: "Qwen/Qwen3-30B-A3B" # Qwen3-30B model from OpenRouter
+  model: "gpt-4.1-mini" # Or another suitable model like gpt-3.5-turbo
   stt_model: "whisper-1"
+  stt_language: "en-IN" # ISO 639-1 code for desired STT language (e.g., en, es, fr, en-IN)
   tts_model: "tts-1"
   tts_voice: "alloy" # alloy, echo, fable, onyx, nova, shimmer
 
