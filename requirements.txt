@@ -1,0 +1,61 @@
+# torch
+# torchvision
+# easyocr
+supervision==0.18.0
+# transformers
+ultralytics==8.3.70
+numpy==1.26.4
+gradio
+pyautogui==0.9.54
+anthropic[bedrock,vertex]>=0.37.1
+pyxbrain==1.1.31
+timm
+einops==0.8.0
+modelscope
+pynput
+lap
+pyqt6==6.8.1
+keyboard==0.13.5
+
+# Core ML/Vision (Likely needed by Ultralytics/Screen Analysis)
+torch
+torchvision
+transformers
+ultralytics==8.3.70
+supervision==0.18.0
+numpy==1.26.4
+timm
+einops==0.8.0
+lap
+
+# Screen Analysis / Models
+opencv-python-headless # Added dependency for cv2
+ultralytics==8.3.70
+supervision==0.18.0
+modelscope # For model downloading
+pydantic # For models
+
+# Desktop Automation / Control
+pyautogui==0.9.54
+pynput
+keyboard==0.13.5
+pyperclip # For clipboard interactions
+
+# Audio (S2S Components)
+pvporcupine
+pyaudio # May require system dependencies (e.g., portaudio-dev)
+pyttsx3 # For system TTS
+pygame # For OpenAI TTS playback
+openai-whisper # For local STT model used in stt.py
+
+# LLM Interaction
+openai
+
+# Utilities
+PyYAML # For config loading
+
+# GUI (Optional Utilities)
+PyQt6==6.8.1 # Used by screen_selector.py
+
+# Testing
+pytest

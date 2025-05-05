@@ -1,0 +1,26 @@
+# Sample valid configuration
+project_name: "Jarvis Assistant"
+version: 0.1
+
+llm:
+  provider: openai
+  model: gpt-4o-mini
+  api_key: "sk-dummy-key-from-yaml" # Example key
+
+audio:
+  input_device_index: null # Use default
+  output_device_index: null
+
+tts:
+  engine: system # 'system' or 'openai'
+  system:
+    rate: 150
+    # voice_id: some_voice_id_here
+  openai:
+    voice: nova
+
+picovoice:
+  # access_key: REQUIRED_ACCESS_KEY # Intentionally missing for some tests
+  keyword_paths:
+    - /path/to/keywords/jarvis.ppn # Example path
+  sensitivities: [0.6]
