@@ -266,7 +266,7 @@ class MainWindowModel(QObject):
         self.state = {
             "api_key": "",  # These would come from config or env vars
             "base_url": "https://api.openai.com/v1",
-            "model": "gpt-4o",
+            "model": "gpt-4.1-mini",
             "theme": "Dark",  # Set dark theme as default
             "messages": [],
             "chatbox_messages": [],

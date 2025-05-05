@@ -33,7 +33,7 @@ def executor():
 @patch('time.sleep')
 def test_execute_key_single(mock_sleep, executor):
     mock_pyautogui.reset_mock()
-    result = executor.execute("key", text="Enter")
+    result = executor.execute("key", keys="Enter")
     mock_pyautogui.press.assert_called_once_with("enter") # Check mapping
     mock_sleep.assert_called_once()
     assert result.output == "Pressed key(s): Enter"
@@ -41,14 +41,14 @@ def test_execute_key_single(mock_sleep, executor):
 @patch('time.sleep')
 def test_execute_key_unmapped(mock_sleep, executor):
     mock_pyautogui.reset_mock()
-    result = executor.execute("key", text="a")
+    result = executor.execute("key", keys="a")
     mock_pyautogui.press.assert_called_once_with("a")
     assert result.output == "Pressed key(s): a"
 
 @patch('time.sleep')
 def test_execute_key_hotkey(mock_sleep, executor):
     mock_pyautogui.reset_mock()
-    result = executor.execute("key", text="Ctrl+C")
+    result = executor.execute("key", keys="Ctrl+C")
     mock_pyautogui.hotkey.assert_called_once_with("ctrl", "c")
     mock_sleep.assert_called_once()
     assert result.output == "Pressed key(s): Ctrl+C"
@@ -56,27 +56,32 @@ def test_execute_key_hotkey(mock_sleep, executor):
 @patch('time.sleep')
 def test_execute_key_hotkey_with_mapping(mock_sleep, executor):
     mock_pyautogui.reset_mock()
-    result = executor.execute("key", text="Super_L+Tab")
+    result = executor.execute("key", keys="Super_L+Tab")
     mock_pyautogui.hotkey.assert_called_once_with("win", "tab") # Check mapping
     assert result.output == "Pressed key(s): Super_L+Tab"
 
 def test_execute_key_missing_text(executor):
-    result = executor.execute("key") # Missing text kwarg
+    result = executor.execute("key") # Missing keys kwarg
     assert result.error is not None
-    assert "'text' argument required" in result.error
+    assert "'keys' argument required" in result.error
+    assert not result.success
 
 @patch('time.sleep')
 @patch('pyautogui.press', side_effect=Exception("Keypress error"))
 def test_execute_key_press_error(mock_press_error, mock_sleep, executor):
     mock_pyautogui.reset_mock()
-    result = executor.execute("key", text="Enter")
+    mock_pyautogui.hotkey.reset_mock()
+    result = executor.execute("key", keys="Enter")
     assert result.error is not None
     assert "Failed to press key(s) 'Enter': Keypress error" in result.error
+    assert not result.success
+    mock_press_error.assert_called_once_with('enter')
+    mock_pyautogui.hotkey.assert_not_called() # Explicitly check hotkey wasn't called
 
 @patch('time.sleep')
 def test_execute_scroll_up(mock_sleep, executor):
     mock_pyautogui.reset_mock()
-    result = executor.execute("scroll_up")
+    result = executor.execute("scroll", direction="up")
     mock_pyautogui.scroll.assert_called_once_with(150)
     mock_sleep.assert_called_once()
     assert result.output == "Scrolled up"
@@ -84,18 +89,46 @@ def test_execute_scroll_up(mock_sleep, executor):
 @patch('time.sleep')
 def test_execute_scroll_down(mock_sleep, executor):
     mock_pyautogui.reset_mock()
-    result = executor.execute("scroll_down")
+    result = executor.execute("scroll", direction="down")
     mock_pyautogui.scroll.assert_called_once_with(-150)
     mock_sleep.assert_called_once()
     assert result.output == "Scrolled down"
 
+def test_execute_scroll_missing_direction(executor):
+    """Test scroll action fails if direction is missing."""
+    mock_pyautogui.reset_mock()
+    result = executor.execute("scroll")
+    assert not result.success
+    assert "'direction' argument required" in result.error
+    mock_pyautogui.scroll.assert_not_called()
+
+def test_execute_scroll_invalid_direction(executor):
+    """Test scroll action fails if direction is invalid."""
+    mock_pyautogui.reset_mock()
+    result = executor.execute("scroll", direction="sideways")
+    assert not result.success
+    assert "Invalid scroll direction" in result.error
+    mock_pyautogui.scroll.assert_not_called()
+
 @patch('time.sleep')
 @patch('pyautogui.scroll', side_effect=Exception("Scroll error"))
 def test_execute_scroll_error(mock_scroll_error, mock_sleep, executor):
+    # Test scroll up error
     mock_pyautogui.reset_mock()
-    result = executor.execute("scroll_up")
-    assert result.error is not None
-    assert "Failed to scroll up: Scroll error" in result.error
+    result_up = executor.execute("scroll", direction="up")
+    assert result_up.error is not None
+    assert "Failed to scroll up: Scroll error" in result_up.error
+    assert not result_up.success
+    mock_scroll_error.assert_called_once_with(150)
+
+    # Test scroll down error
+    mock_pyautogui.reset_mock()
+    mock_scroll_error.reset_mock()
+    result_down = executor.execute("scroll", direction="down")
+    assert result_down.error is not None
+    assert "Failed to scroll down: Scroll error" in result_down.error
+    assert not result_down.success
+    mock_scroll_error.assert_called_once_with(-150)
 
 @patch('time.sleep')
 def test_execute_wait_default(mock_sleep, executor):
