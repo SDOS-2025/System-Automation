@@ -359,7 +359,7 @@ class LLMInteraction:
         if not self.api_key:
             raise ValueError("OpenAI API key not found in configuration.")
 
-        self.model = get_config_value("openai.model", "gpt-4o")
+        self.model = get_config_value("openai.model", "gpt-4.1-mini")
         self.client = OpenAI(api_key=self.api_key)
         self.tools = get_tools_schema() # Store tool schema
         logger.info(f"OpenAI client initialized for model: {self.model} with tools.")
