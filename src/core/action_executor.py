@@ -18,7 +18,6 @@ TYPING_DELAY_SECS = 0.05 # Delay between key presses for typing
 ACTION_DELAY_SECS = 0.5 # Short delay after actions like clicks
 WAIT_DELAY_SECS = 1.0 # Default delay for explicit wait action
 
-# Key name mapping (from autoMate/auto_control/tools/computer.py)
 # Add more mappings as needed (e.g., for function keys, modifiers)
 PYAUTOGUI_KEY_MAP = {
     "Page_Down": "pagedown",

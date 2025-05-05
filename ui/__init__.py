@@ -1,3 +1,3 @@
 """
-autoMate UI package
+UI package
 """ 
