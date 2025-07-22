@@ -121,10 +121,6 @@ python -m src.assistant --gui
 *   `requirements.txt`: Core Python dependencies.
 *   `README.md`: This file.
 
-## Contributing
-
-(Add contribution guidelines if desired)
-
 ## License
 
-(Specify license - check LICENSE file)
+This project is licensed under the MIT License, which allows you to freely use, modify, and distribute the code, provided that you include the copyright notice and disclaimers of warranty.
